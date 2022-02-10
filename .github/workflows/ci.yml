@@ -1,11 +1,15 @@
+name: Build
+
+on: [push, pull_request]
+
 jobs:
   build:
     runs-on: ubuntu-latest
-    name: Run tests
     steps:
       - uses: actions/checkout@v2
       - name: Setup go
         uses: actions/setup-go@v2
         with:
-          go-version: 1.16
-      - run: go test ./...
+          go-version: '1.16.0'
+      - name: Run tests
+        run: go test ./...
