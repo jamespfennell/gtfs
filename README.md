@@ -1,2 +1,4 @@
 # gtfs
-Go library for parsing GTFS static and realtime
+This is a Go library for parsing GTFS static and realtime feeds.
+
+Currently WIP.
