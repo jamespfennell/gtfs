@@ -11,7 +11,7 @@ import (
 	"github.com/jamespfennell/gtfs/csv"
 )
 
-// Static contains the parsed content for a single GTFS static feed.
+// Static contains the parsed content for a single GTFS static message.
 type Static struct {
 	Agencies []Agency
 	Routes   []Route
