@@ -52,6 +52,13 @@ func (trip Trip) String() string {
 		trip.ID.ID, trip.ID.RouteID, trip.ID.DirectionID, trip.ID.StartTime, trip.ID.StartDate)
 }
 
+func (trip *Trip) GetVehicle() Vehicle {
+	if trip != nil && trip.Vehicle != nil {
+		return *trip.Vehicle
+	}
+	return Vehicle{}
+}
+
 type TripID struct {
 	ID          string
 	RouteID     string
@@ -69,6 +76,20 @@ type StopTimeUpdate struct {
 	StopID       *string
 	Arrival      *StopTimeEvent
 	Departure    *StopTimeEvent
+}
+
+func (stopTimeUpdate *StopTimeUpdate) GetArrival() StopTimeEvent {
+	if stopTimeUpdate != nil && stopTimeUpdate.Arrival != nil {
+		return *stopTimeUpdate.Arrival
+	}
+	return StopTimeEvent{}
+}
+
+func (stopTimeUpdate *StopTimeUpdate) GetDeparture() StopTimeEvent {
+	if stopTimeUpdate != nil && stopTimeUpdate.Departure != nil {
+		return *stopTimeUpdate.Departure
+	}
+	return StopTimeEvent{}
 }
 
 func (stopTimeUpdate StopTimeUpdate) String() string {
@@ -105,6 +126,19 @@ type Vehicle struct {
 	IsEntityInMessage bool
 }
 
+func (vehicle *Vehicle) GetID() VehicleID {
+	if vehicle != nil && vehicle.ID != nil {
+		return *vehicle.ID
+	}
+	return VehicleID{}
+}
+func (vehicle *Vehicle) GetTrip() Trip {
+	if vehicle != nil && vehicle.Trip != nil {
+		return *vehicle.Trip
+	}
+	return Trip{}
+}
+
 type ParseRealtimeOptions struct {
 	// The timezone to interpret date field.
 	//
@@ -113,6 +147,13 @@ type ParseRealtimeOptions struct {
 
 	// Whether to use the New York City Transit extensions.
 	UseNyctExtension bool
+}
+
+func (opts *ParseRealtimeOptions) timezoneOrUTC() *time.Location {
+	if opts.Timezone != nil {
+		return opts.Timezone
+	}
+	return time.UTC
 }
 
 func ParseRealtime(content []byte, opts *ParseRealtimeOptions) (*Realtime, error) {
@@ -211,7 +252,7 @@ func parseTripUpdate(tripUpdate *gtfsrt.TripUpdate, opts *ParseRealtimeOptions) 
 			Uncertainty: stopTimeEvent.Uncertainty,
 		}
 		if stopTimeEvent.Time != nil {
-			t := time.Unix(*stopTimeEvent.Time, 0).In(opts.Timezone)
+			t := time.Unix(*stopTimeEvent.Time, 0).In(opts.timezoneOrUTC())
 			result.Time = &t
 		}
 		if stopTimeEvent.Delay != nil {
@@ -282,7 +323,7 @@ func parseTripDescriptor(tripDesc *gtfsrt.TripDescriptor, opts *ParseRealtimeOpt
 		DirectionID: convertDirectionID(tripDesc.DirectionId),
 	}
 	id.HasStartTime, id.StartTime = parseStartTime(tripDesc.StartTime)
-	id.HasStartDate, id.StartDate = parseStartDate(tripDesc.StartDate, opts.Timezone)
+	id.HasStartDate, id.StartDate = parseStartDate(tripDesc.StartDate, opts.timezoneOrUTC())
 	return id
 }
 
