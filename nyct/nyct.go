@@ -12,12 +12,13 @@ import (
 
 var TripIDRegex *regexp.Regexp = regexp.MustCompile(`^([0-9]{6})_([[:alnum:]]{1,2})..([SN])([[:alnum:]]*)$`)
 
-type HasDescriptors interface {
+type HasTripDescriptor interface {
 	GetTrip() *gtfsrt.TripDescriptor
-	GetVehicle() *gtfsrt.VehicleDescriptor
 }
 
-func UpdateDescriptors(entity HasDescriptors) bool {
+// UpdateDescriptors populates fields in the GTFS trip and vehicle descriptors
+// using data in the NYCT trip descriptors extension.
+func UpdateDescriptors(entity HasTripDescriptor) bool {
 	tripDesc := entity.GetTrip()
 	if !proto.HasExtension(tripDesc, gtfsrt.E_NyctTripDescriptor) {
 		return false
@@ -55,11 +56,23 @@ func UpdateDescriptors(entity HasDescriptors) bool {
 	return nyctTripDesc.GetIsAssigned()
 }
 
-func setVehicleDescriptor(entity HasDescriptors, vehicleDesc *gtfsrt.VehicleDescriptor) {
+func setVehicleDescriptor(entity HasTripDescriptor, vehicleDesc *gtfsrt.VehicleDescriptor) {
 	switch t := entity.(type) {
 	case *gtfsrt.TripUpdate:
 		t.Vehicle = vehicleDesc
 	case *gtfsrt.VehiclePosition:
 		t.Vehicle = vehicleDesc
 	}
+}
+
+func GetTrack(stopTimeUpdate *gtfsrt.TripUpdate_StopTimeUpdate) *string {
+	if !proto.HasExtension(stopTimeUpdate, gtfsrt.E_NyctStopTimeUpdate) {
+		return nil
+	}
+	extendedEvent := proto.GetExtension(stopTimeUpdate, gtfsrt.E_NyctStopTimeUpdate)
+	nyctStopTimeUpdate, _ := extendedEvent.(*gtfsrt.NyctStopTimeUpdate)
+	if nyctStopTimeUpdate.ActualTrack != nil {
+		return nyctStopTimeUpdate.ActualTrack
+	}
+	return nyctStopTimeUpdate.ScheduledTrack
 }

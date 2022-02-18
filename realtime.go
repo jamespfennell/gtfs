@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"regexp"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/jamespfennell/gtfs/nyct"
@@ -47,11 +46,6 @@ type Trip struct {
 	IsEntityInMessage bool
 }
 
-func (trip Trip) String() string {
-	return fmt.Sprintf("ID: %s, route ID: %s, direction ID: %s %s %s",
-		trip.ID.ID, trip.ID.RouteID, trip.ID.DirectionID, trip.ID.StartTime, trip.ID.StartDate)
-}
-
 func (trip *Trip) GetVehicle() Vehicle {
 	if trip != nil && trip.Vehicle != nil {
 		return *trip.Vehicle
@@ -71,11 +65,13 @@ type TripID struct {
 	StartDate    time.Time
 }
 
+// TODO: shouldn't this just be StopTime?
 type StopTimeUpdate struct {
 	StopSequence *uint32
 	StopID       *string
 	Arrival      *StopTimeEvent
 	Departure    *StopTimeEvent
+	NyctTrack    *string
 }
 
 func (stopTimeUpdate *StopTimeUpdate) GetArrival() StopTimeEvent {
@@ -90,20 +86,6 @@ func (stopTimeUpdate *StopTimeUpdate) GetDeparture() StopTimeEvent {
 		return *stopTimeUpdate.Departure
 	}
 	return StopTimeEvent{}
-}
-
-func (stopTimeUpdate StopTimeUpdate) String() string {
-	var b strings.Builder
-	if stopTimeUpdate.StopSequence != nil {
-		b.WriteString(fmt.Sprintf("stop_sequence=%d, ", *stopTimeUpdate.StopSequence))
-	}
-	if stopTimeUpdate.StopID != nil {
-		b.WriteString(fmt.Sprintf("stop_id=%s, ", *stopTimeUpdate.StopID))
-	}
-	if stopTimeUpdate.Arrival != nil {
-		b.WriteString(fmt.Sprintf("arrival=%s, ", *stopTimeUpdate.Arrival.Time))
-	}
-	return b.String()
 }
 
 type StopTimeEvent struct {
@@ -262,11 +244,16 @@ func parseTripUpdate(tripUpdate *gtfsrt.TripUpdate, opts *ParseRealtimeOptions) 
 		return &result
 	}
 	for _, stopTimeUpdate := range tripUpdate.StopTimeUpdate {
+		var nyctTrack *string
+		if opts.UseNyctExtension {
+			nyctTrack = nyct.GetTrack(stopTimeUpdate)
+		}
 		trip.StopTimeUpdates = append(trip.StopTimeUpdates, StopTimeUpdate{
 			StopSequence: stopTimeUpdate.StopSequence,
 			StopID:       stopTimeUpdate.StopId,
 			Arrival:      convertStopTimeEvent(stopTimeUpdate.Arrival),
 			Departure:    convertStopTimeEvent(stopTimeUpdate.Departure),
+			NyctTrack:    nyctTrack,
 		})
 	}
 	if tripUpdate.Vehicle == nil {
@@ -355,9 +342,6 @@ func parseStartDate(startDate *string, timezone *time.Location) (bool, time.Time
 	y, _ := strconv.Atoi(startDateMatch[1])
 	m, _ := strconv.Atoi(startDateMatch[2])
 	d, _ := strconv.Atoi(startDateMatch[3])
-	if timezone == nil {
-		timezone = time.UTC
-	}
 	return true, time.Date(y, time.Month(m), d, 0, 0, 0, 0, timezone)
 }
 

@@ -3,8 +3,10 @@ package main
 import (
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
+	"github.com/fatih/color"
 	"github.com/jamespfennell/gtfs"
 	"github.com/urfave/cli/v2"
 )
@@ -62,17 +64,7 @@ func main() {
 					}
 					fmt.Printf("%d trips:\n", len(realtime.Trips))
 					for _, trip := range realtime.Trips {
-						fmt.Printf("- %s\n", trip)
-						if trip.Vehicle != nil {
-							fmt.Printf("  Vehicle: %s\n", trip.Vehicle.ID)
-						} else {
-							fmt.Printf("  Vehicle: none\n")
-						}
-						if ctx.Bool("verbose") {
-							for _, stopTimeUpdate := range trip.StopTimeUpdates {
-								fmt.Printf("  * %s\n", stopTimeUpdate)
-							}
-						}
+						fmt.Printf("- %s\n", formatTrip(trip, 2, ctx.Bool("verbose")))
 					}
 					return nil
 				},
@@ -83,4 +75,66 @@ func main() {
 		fmt.Println("Error:", err)
 		os.Exit(1)
 	}
+}
+
+func formatTrip(trip gtfs.Trip, indent int, printStopTimes bool) string {
+	var b strings.Builder
+	tc := color.New(color.FgCyan)
+	vc := color.New(color.FgMagenta)
+	sc := color.New(color.FgGreen)
+	newLine := fmt.Sprintf("\n%*s", indent, "")
+	fmt.Fprintf(&b,
+		"TripID %s  RouteID %s  DirectionID %s  StartDate %s  StartTime %s%s",
+		tc.Sprint(trip.ID.ID),
+		tc.Sprint(trip.ID.RouteID),
+		tc.Sprint(trip.ID.DirectionID),
+		tc.Sprint(trip.ID.StartDate.Format("2006-01-02")),
+		tc.Sprint(trip.ID.StartTime),
+		newLine,
+	)
+	if trip.Vehicle != nil {
+		fmt.Fprintf(&b, "Vehicle: ID %s%s", vc.Sprint(trip.Vehicle.GetID().ID), newLine)
+	} else {
+		fmt.Fprintf(&b, "Vehicle: <none>%s", newLine)
+	}
+
+	if printStopTimes {
+		fmt.Fprintf(&b, "Stop times (%d):%s", len(trip.StopTimeUpdates), newLine)
+		for _, stopTime := range trip.StopTimeUpdates {
+			fmt.Fprintf(&b,
+				"  StopSeq %s  StopID %s  Arrival %s  Departure %s  NyctTrack %s%s",
+				sc.Sprint(unPtrI(stopTime.StopSequence)),
+				sc.Sprint(unPtr(stopTime.StopID)),
+				unPtrT(stopTime.GetArrival().Time, sc),
+				unPtrT(stopTime.GetDeparture().Time, sc),
+				sc.Sprint(unPtr(stopTime.NyctTrack)),
+				newLine,
+			)
+		}
+	} else {
+		fmt.Fprintf(&b, "Num stop times: %d (show with -v)%s", len(trip.StopTimeUpdates), newLine)
+	}
+
+	return b.String()
+}
+
+func unPtr(s *string) string {
+	if s == nil {
+		return "<none>"
+	}
+	return *s
+}
+
+func unPtrI(s *uint32) string {
+	if s == nil {
+		return "<none>"
+	}
+	return fmt.Sprintf("%d", s)
+}
+
+func unPtrT(t *time.Time, c *color.Color) string {
+	if t == nil {
+		return "<none>"
+	}
+	return c.Sprint(t.String())
 }
