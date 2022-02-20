@@ -62,6 +62,9 @@ func main() {
 					if err != nil {
 						return fmt.Errorf("failed to parse message: %w", err)
 					}
+					if realtime.CreatedAt != nil {
+						fmt.Printf("Created at %s\n", *realtime.CreatedAt)
+					}
 					fmt.Printf("%d trips:\n", len(realtime.Trips))
 					for _, trip := range realtime.Trips {
 						fmt.Printf("- %s\n", formatTrip(trip, 2, ctx.Bool("verbose")))

@@ -31,6 +31,8 @@ func (d DirectionID) String() string {
 
 // Realtime contains the parsed content for a single GTFS realtime message.
 type Realtime struct {
+	CreatedAt *time.Time
+
 	Trips []Trip
 
 	Vehicles []Vehicle
@@ -197,6 +199,10 @@ func ParseRealtime(content []byte, opts *ParseRealtimeOptions) (*Realtime, error
 	}
 
 	var result Realtime
+	if t := feedMessage.GetHeader().Timestamp; t != nil {
+		createdAt := time.Unix(int64(*t), 0).In(opts.timezoneOrUTC())
+		result.CreatedAt = &createdAt
+	}
 	for tripID, trip := range tripsById {
 		if vehicleID, ok := tripIDToVehicleID[tripID]; ok {
 			trip.Vehicle = vehiclesByID[vehicleID]

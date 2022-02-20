@@ -3,6 +3,7 @@ package gtfs
 import (
 	"reflect"
 	"testing"
+	"time"
 
 	gtfsrt "github.com/jamespfennell/gtfs/proto"
 	"google.golang.org/protobuf/proto"
@@ -11,11 +12,15 @@ import (
 const tripID1 = "tripID1"
 const vehicleID1 = "vehicleID1"
 
+var time1 time.Time = time.Unix(2<<28, 0).UTC()
+
 func TestSoloTrip(t *testing.T) {
 
+	timestamp := uint64(time1.Unix())
 	message := gtfsrt.FeedMessage{
 		Header: &gtfsrt.FeedHeader{
 			GtfsRealtimeVersion: ptr("2.0"),
+			Timestamp:           &timestamp,
 		},
 		Entity: []*gtfsrt.FeedEntity{
 			{
@@ -52,8 +57,9 @@ func TestSoloTrip(t *testing.T) {
 	trip.Vehicle = &vehicle
 	vehicle.Trip = &trip
 	expectedResult := &Realtime{
-		Trips:    []Trip{trip},
-		Vehicles: []Vehicle{vehicle},
+		CreatedAt: &time1,
+		Trips:     []Trip{trip},
+		Vehicles:  []Vehicle{vehicle},
 	}
 
 	result, err := ParseRealtime(b, &ParseRealtimeOptions{})
