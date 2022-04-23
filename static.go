@@ -15,6 +15,7 @@ import (
 type Static struct {
 	Agencies []Agency
 	Routes   []Route
+	Stops    []Stop
 }
 
 // Agency corresponds to a single row in the agency.txt file.
@@ -158,6 +159,92 @@ type Route struct {
 	ContinuousDropOff RoutePolicy
 }
 
+type Stop struct {
+	Id                 string
+	Code               *string
+	Name               *string
+	Description        *string
+	ZoneId             *string
+	Longitude          *float64
+	Lattitude          *float64
+	Url                *string
+	Type               StopType
+	Timezone           *string
+	WheelchairBoarding WheelchairBoarding
+	PlatformCode       *string
+}
+
+type StopType int32
+
+const (
+	Platform       StopType = 0
+	Station        StopType = 1
+	EntanceOrExit  StopType = 2
+	GenericNode    StopType = 3
+	BoardingArea   StopType = 4
+	GroupedStation StopType = 1001
+)
+
+func NewStopType(i int) (StopType, bool) {
+	var t StopType
+	switch i {
+	case 0:
+		t = Platform
+	case 1:
+		t = Station
+	case 2:
+		t = EntanceOrExit
+	case 3:
+		t = GenericNode
+	case 4:
+		t = BoardingArea
+	default:
+		return Platform, false
+	}
+	return t, true
+}
+
+func (t StopType) String() string {
+	switch t {
+	case Platform:
+		return "PLATFORM"
+	case Station:
+		return "STATION"
+	case EntanceOrExit:
+		return "ENTRANCE_OR_EXIT"
+	case GenericNode:
+		return "GENERIC_NODE"
+	case BoardingArea:
+		return "BOARDING_AREA"
+	case GroupedStation:
+		return "GROUPED_STATION"
+	}
+	return "UNKNOWN"
+}
+
+type WheelchairBoarding int32
+
+const (
+	NotSpecified WheelchairBoarding = 0
+	Possible     WheelchairBoarding = 1
+	NotPossible  WheelchairBoarding = 2
+)
+
+func NewWheelchairBoarding(i int) (WheelchairBoarding, bool) {
+	var t WheelchairBoarding
+	switch i {
+	case 0:
+		t = NotSpecified
+	case 1:
+		t = Possible
+	case 2:
+		t = NotPossible
+	default:
+		return NotSpecified, false
+	}
+	return t, true
+}
+
 type ParseStaticOptions struct{}
 
 // ParseStatic parses the content as a GTFS static feed.
@@ -185,6 +272,12 @@ func ParseStatic(content []byte, opts ParseStaticOptions) (*Static, error) {
 			"routes.txt",
 			func(file *csv.File) {
 				result.Routes = parseRoutes(file, result.Agencies)
+			},
+		},
+		{
+			"stops.txt",
+			func(file *csv.File) {
+				result.Stops = parseStops(file)
 			},
 		},
 	} {
@@ -320,4 +413,67 @@ func parseRoutePolicy(raw *string) RoutePolicy {
 		return NotAllowed
 	}
 	return NewRoutePolicy(i)
+}
+
+func parseStops(csv *csv.File) []Stop {
+	var stops []Stop
+	iter := csv.Iter()
+	for iter.Next() {
+		row := iter.Get()
+		stop := Stop{
+			Id:                 row.Get("stop_id"),
+			Code:               row.GetOptional("stop_code"),
+			Name:               row.GetOptional("stop_name"),
+			Description:        row.GetOptional("stop_desc"),
+			ZoneId:             row.GetOptional("zone_id"),
+			Longitude:          parseFloat64(row.GetOptional("stop_lon")),
+			Lattitude:          parseFloat64(row.GetOptional("stop_lat")),
+			Url:                row.GetOptional("stop_url"),
+			Type:               parseStopType(row.GetOptional("location_type")),
+			Timezone:           row.GetOptional("stop_timezone"),
+			WheelchairBoarding: parseWheelchairBoarding(row.GetOptional("wheelchair_boarding")),
+			PlatformCode:       row.GetOptional("platform_code"),
+		}
+		if missingKeys := row.MissingKeys(); len(missingKeys) > 0 {
+			log.Printf("Skipping stop %+v because of missing keys %s", stop, missingKeys)
+			continue
+		}
+		stops = append(stops, stop)
+	}
+	return stops
+}
+
+func parseFloat64(raw *string) *float64 {
+	if raw == nil {
+		return nil
+	}
+	f, err := strconv.ParseFloat(*raw, 64)
+	if err != nil {
+		return nil
+	}
+	return &f
+}
+
+func parseStopType(raw *string) StopType {
+	if raw == nil {
+		return Platform
+	}
+	i, err := strconv.Atoi(*raw)
+	if err != nil {
+		return Platform
+	}
+	t, _ := NewStopType(i)
+	return t
+}
+
+func parseWheelchairBoarding(raw *string) WheelchairBoarding {
+	if raw == nil {
+		return NotSpecified
+	}
+	i, err := strconv.Atoi(*raw)
+	if err != nil {
+		return NotSpecified
+	}
+	t, _ := NewWheelchairBoarding(i)
+	return t
 }

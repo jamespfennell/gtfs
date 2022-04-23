@@ -139,6 +139,33 @@ func TestParse(t *testing.T) {
 				},
 			},
 		},
+		{
+			"stop",
+			newZipBuilder().add(
+				"stops.txt",
+				"stop_id,stop_code,stop_name,stop_desc,zone_id,stop_lon,stop_lat,"+
+					"stop_url,location_type,stop_timezone,wheelchair_boarding,platform_code\n"+
+					"a,b,c,d,e,1.5,2.5,f,1,g,1,h",
+			).build(),
+			&Static{
+				Stops: []Stop{
+					{
+						Id:                 "a",
+						Code:               ptr("b"),
+						Name:               ptr("c"),
+						Description:        ptr("d"),
+						ZoneId:             ptr("e"),
+						Longitude:          floatPtr(1.5),
+						Lattitude:          floatPtr(2.5),
+						Url:                ptr("f"),
+						Type:               Station,
+						Timezone:           ptr("g"),
+						WheelchairBoarding: Possible,
+						PlatformCode:       ptr("h"),
+					},
+				},
+			},
+		},
 	} {
 		t.Run(tc.desc, func(t *testing.T) {
 			actual, err := ParseStatic(tc.content, ParseStaticOptions{})
@@ -161,6 +188,8 @@ func newZipBuilder() *zipBuilder {
 		"agency.txt", "agency_id,agency_name,agency_url,agency_timezone",
 	).add(
 		"routes.txt", "route_id,route_type",
+	).add(
+		"stops.txt", "stop_id",
 	)
 }
 
@@ -193,4 +222,8 @@ func ptr(s string) *string {
 
 func intPtr(i int32) *int32 {
 	return &i
+}
+
+func floatPtr(f float64) *float64 {
+	return &f
 }
