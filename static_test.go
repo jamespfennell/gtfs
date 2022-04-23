@@ -24,15 +24,16 @@ func TestParse(t *testing.T) {
 	for _, tc := range []struct {
 		desc     string
 		content  []byte
+		opts     ParseStaticOptions
 		expected *Static
 	}{
 		{
-			"agency with only required fields",
-			newZipBuilder().add(
+			desc: "agency with only required fields",
+			content: newZipBuilder().add(
 				"agency.txt",
 				"agency_id,agency_name,agency_url,agency_timezone\na,b,c,d",
 			).build(),
-			&Static{
+			expected: &Static{
 				Agencies: []Agency{
 					{
 						Id:       "a",
@@ -44,12 +45,12 @@ func TestParse(t *testing.T) {
 			},
 		},
 		{
-			"agency with all fields",
-			newZipBuilder().add(
+			desc: "agency with all fields",
+			content: newZipBuilder().add(
 				"agency.txt",
 				"agency_id,agency_name,agency_url,agency_timezone,agency_lang,agency_phone,agency_fare_url,agency_email\na,b,c,d,e,f,g,h",
 			).build(),
-			&Static{
+			expected: &Static{
 				Agencies: []Agency{
 					{
 						Id:       "a",
@@ -65,15 +66,15 @@ func TestParse(t *testing.T) {
 			},
 		},
 		{
-			"route with only required fields",
-			newZipBuilder().add(
+			desc: "route with only required fields",
+			content: newZipBuilder().add(
 				"agency.txt",
 				"agency_id,agency_name,agency_url,agency_timezone\na,b,c,d",
 			).add(
 				"routes.txt",
 				"route_id,route_type\na,3",
 			).build(),
-			&Static{
+			expected: &Static{
 				Agencies: []Agency{defaultAgency},
 				Routes: []Route{
 					{
@@ -87,8 +88,8 @@ func TestParse(t *testing.T) {
 			},
 		},
 		{
-			"route with all fields",
-			newZipBuilder().add(
+			desc: "route with all fields",
+			content: newZipBuilder().add(
 				"agency.txt",
 				"agency_id,agency_name,agency_url,agency_timezone\na,b,c,d",
 			).add(
@@ -97,7 +98,7 @@ func TestParse(t *testing.T) {
 					"route_long_name,route_desc,route_type,route_url,route_sort_order,continuous_pickup,continuous_dropoff\n"+
 					"a,b,c,e,f,g,2,h,5,0,2",
 			).build(),
-			&Static{
+			expected: &Static{
 				Agencies: []Agency{defaultAgency},
 				Routes: []Route{
 					{
@@ -118,15 +119,15 @@ func TestParse(t *testing.T) {
 			},
 		},
 		{
-			"route with matching specified agency",
-			newZipBuilder().add(
+			desc: "route with matching specified agency",
+			content: newZipBuilder().add(
 				"agency.txt",
 				"agency_id,agency_name,agency_url,agency_timezone\na,b,c,d\ne,f,g,h",
 			).add(
 				"routes.txt",
 				"route_id,route_type,agency_id\na,3,e",
 			).build(),
-			&Static{
+			expected: &Static{
 				Agencies: []Agency{defaultAgency, otherAgency},
 				Routes: []Route{
 					{
@@ -140,14 +141,14 @@ func TestParse(t *testing.T) {
 			},
 		},
 		{
-			"stop",
-			newZipBuilder().add(
+			desc: "stop",
+			content: newZipBuilder().add(
 				"stops.txt",
 				"stop_id,stop_code,stop_name,stop_desc,zone_id,stop_lon,stop_lat,"+
 					"stop_url,location_type,stop_timezone,wheelchair_boarding,platform_code\n"+
 					"a,b,c,d,e,1.5,2.5,f,1,g,1,h",
 			).build(),
-			&Static{
+			expected: &Static{
 				Stops: []Stop{
 					{
 						Id:                 "a",
@@ -166,13 +167,122 @@ func TestParse(t *testing.T) {
 				},
 			},
 		},
+		{
+			desc: "stop with parent",
+			content: newZipBuilder().add(
+				"stops.txt",
+				"stop_id,parent_station\na,b\nb,",
+			).build(),
+			expected: &Static{
+				Stops: []Stop{
+					{
+						Id:     "a",
+						Parent: &Stop{Id: "b"},
+					},
+					{
+						Id: "b",
+					},
+				},
+			},
+		},
+		{
+			desc: "transfer",
+			content: newZipBuilder().add(
+				"stops.txt",
+				"stop_id\na\nb",
+			).add(
+				"transfers.txt",
+				"from_stop_id,to_stop_id,transfer_type,min_transfer_time\na,b,2,300",
+			).build(),
+			expected: &Static{
+				Stops: []Stop{
+					{Id: "a"},
+					{Id: "b"},
+				},
+				Transfers: []Transfer{
+					{
+						From:            &Stop{Id: "a"},
+						To:              &Stop{Id: "b"},
+						Type:            RequiresTime,
+						MinTransferTime: intPtr(300),
+					},
+				},
+			},
+		},
+		{
+			desc: "same stop transfer",
+			content: newZipBuilder().add(
+				"stops.txt",
+				"stop_id\na",
+			).add(
+				"transfers.txt",
+				"from_stop_id,to_stop_id\na,a",
+			).build(),
+			expected: &Static{
+				Stops: []Stop{{Id: "a"}},
+			},
+		},
+		{
+			desc: "transfer unknown to_id",
+			content: newZipBuilder().add(
+				"stops.txt",
+				"stop_id\na",
+			).add(
+				"transfers.txt",
+				"from_stop_id,to_stop_id\na,b",
+			).build(),
+			expected: &Static{
+				Stops: []Stop{{Id: "a"}},
+			},
+		},
+		{
+			desc: "transfer unknown from_id",
+			content: newZipBuilder().add(
+				"stops.txt",
+				"stop_id\nb",
+			).add(
+				"transfers.txt",
+				"from_stop_id,to_stop_id\na,b",
+			).build(),
+			expected: &Static{
+				Stops: []Stop{{Id: "b"}},
+			},
+		},
+		{
+			desc: "grouped station",
+			content: newZipBuilder().add(
+				"stops.txt",
+				"stop_id,parent_station\na,b\nb,\nc,",
+			).add(
+				"transfers.txt",
+				"from_stop_id,to_stop_id,transfer_type,min_transfer_time\na,c,2,300",
+			).build(),
+			opts: ParseStaticOptions{
+				TransfersOptions: TransfersOptions{
+					Strategy: GroupStations,
+				},
+			},
+			expected: &Static{
+				Stops: []Stop{
+					{Id: "a", Parent: &Stop{Id: "b", Parent: &Stop{Id: "b-c", Type: GroupedStation}}},
+					{Id: "b", Parent: &Stop{Id: "b-c", Type: GroupedStation}},
+					{Id: "c", Parent: &Stop{Id: "b-c", Type: GroupedStation}},
+				},
+				GroupedStations: []Stop{
+					{Id: "b-c", Type: GroupedStation},
+				},
+			},
+		},
 	} {
 		t.Run(tc.desc, func(t *testing.T) {
-			actual, err := ParseStatic(tc.content, ParseStaticOptions{})
+			actual, err := ParseStatic(tc.content, tc.opts)
 			if err != nil {
 				t.Errorf("error when parsing: %s", err)
 			}
 			if !reflect.DeepEqual(actual, tc.expected) {
+				if !reflect.DeepEqual(actual.Stops[0], tc.expected.Stops[0]) {
+					t.Errorf("stops[0] not the same")
+				}
 				t.Errorf("not the same: \n%+v != \n%+v", actual, tc.expected)
 			}
 		})
@@ -190,6 +300,8 @@ func newZipBuilder() *zipBuilder {
 		"routes.txt", "route_id,route_type",
 	).add(
 		"stops.txt", "stop_id",
+	).add(
+		"transfers.txt", "from_stop_id,to_stop_id",
 	)
 }
 

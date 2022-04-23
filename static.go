@@ -6,16 +6,20 @@ import (
 	"bytes"
 	"fmt"
 	"log"
+	"sort"
 	"strconv"
+	"strings"
 
 	"github.com/jamespfennell/gtfs/csv"
 )
 
 // Static contains the parsed content for a single GTFS static message.
 type Static struct {
-	Agencies []Agency
-	Routes   []Route
-	Stops    []Stop
+	Agencies        []Agency
+	Routes          []Route
+	Stops           []Stop
+	Transfers       []Transfer
+	GroupedStations []Stop
 }
 
 // Agency corresponds to a single row in the agency.txt file.
@@ -169,9 +173,19 @@ type Stop struct {
 	Lattitude          *float64
 	Url                *string
 	Type               StopType
+	Parent             *Stop
 	Timezone           *string
 	WheelchairBoarding WheelchairBoarding
 	PlatformCode       *string
+}
+
+func (stop *Stop) Root() *Stop {
+	for {
+		if stop.Parent == nil {
+			return stop
+		}
+		stop = stop.Parent
+	}
 }
 
 type StopType int32
@@ -245,7 +259,81 @@ func NewWheelchairBoarding(i int) (WheelchairBoarding, bool) {
 	return t, true
 }
 
-type ParseStaticOptions struct{}
+type Transfer struct {
+	From            *Stop
+	To              *Stop
+	Type            TransferType
+	MinTransferTime *int32
+}
+
+type TransferType int32
+
+const (
+	Recommended         TransferType = 0
+	Timed               TransferType = 1
+	RequiresTime        TransferType = 2
+	TransferNotPossible TransferType = 3
+)
+
+func NewTransferType(i int32) (TransferType, bool) {
+	var t TransferType
+	switch i {
+	case 0:
+		t = Recommended
+	case 1:
+		t = Timed
+	case 2:
+		t = RequiresTime
+	case 3:
+		t = TransferNotPossible
+	default:
+		return Recommended, false
+	}
+	return t, true
+}
+
+func (t TransferType) String() string {
+	switch t {
+	case Recommended:
+		return "RECOMMENDED"
+	case Timed:
+		return "TIMED"
+	case RequiresTime:
+		return "REQUIRES_TIME"
+	case TransferNotPossible:
+		return "TRANSFER_NOT_POSSIBLE"
+	}
+	return "UNKNOWN"
+}
+
+type ParseStaticOptions struct {
+	TransfersOptions TransfersOptions
+}
+
+type TransfersOptions struct {
+	Strategy   TransfersStrategy
+	Exceptions []struct {
+		FromStopId string
+		ToStopId   string
+		Strategy   TransfersStrategy
+	}
+}
+
+func (opts TransfersOptions) FindStrategy(fromStopId, toStopId string) TransfersStrategy {
+	for _, exception := range opts.Exceptions {
+		if fromStopId == exception.FromStopId && toStopId == exception.ToStopId {
+			return exception.Strategy
+		}
+	}
+	return opts.Strategy
+}
+
+type TransfersStrategy int32
+
+const (
+	TransfersStrategyDefault = 0
+	GroupStations            = 1
+)
 
 // ParseStatic parses the content as a GTFS static feed.
 func ParseStatic(content []byte, opts ParseStaticOptions) (*Static, error) {
@@ -278,6 +366,12 @@ func ParseStatic(content []byte, opts ParseStaticOptions) (*Static, error) {
 			"stops.txt",
 			func(file *csv.File) {
 				result.Stops = parseStops(file)
+			},
+		},
+		{
+			"transfers.txt",
+			func(file *csv.File) {
+				result.Transfers, result.GroupedStations = parseTransfers(file, opts.TransfersOptions, result.Stops)
 			},
 		},
 	} {
@@ -417,6 +511,8 @@ func parseRoutePolicy(raw *string) RoutePolicy {
 
 func parseStops(csv *csv.File) []Stop {
 	var stops []Stop
+	stopIdToIndex := map[string]int{}
+	stopIdToParent := map[string]string{}
 	iter := csv.Iter()
 	for iter.Next() {
 		row := iter.Get()
@@ -438,7 +534,19 @@ func parseStops(csv *csv.File) []Stop {
 			log.Printf("Skipping stop %+v because of missing keys %s", stop, missingKeys)
 			continue
 		}
+		stopIdToIndex[stop.Id] = len(stops)
+		parentStopId := row.GetOptional("parent_station")
+		if parentStopId != nil {
+			stopIdToParent[stop.Id] = *parentStopId
+		}
 		stops = append(stops, stop)
+	}
+	for stopId, parentStopId := range stopIdToParent {
+		parentStopIndex, ok := stopIdToIndex[parentStopId]
+		if !ok {
+			continue
+		}
+		stops[stopIdToIndex[stopId]].Parent = &stops[parentStopIndex]
 	}
 	return stops
 }
@@ -476,4 +584,114 @@ func parseWheelchairBoarding(raw *string) WheelchairBoarding {
 	}
 	t, _ := NewWheelchairBoarding(i)
 	return t
+}
+
+func parseTransfers(csv *csv.File, opts TransfersOptions, stops []Stop) ([]Transfer, []Stop) {
+	stopIdToStop := map[string]*Stop{}
+	for i := range stops {
+		stopIdToStop[stops[i].Id] = &stops[i]
+	}
+	groupingMap := map[string]map[string]bool{}
+	var transfers []Transfer
+	iter := csv.Iter()
+	for iter.Next() {
+		row := iter.Get()
+		fromStop, fromStopOk := stopIdToStop[row.Get("from_stop_id")]
+		toStop, toStopOk := stopIdToStop[row.Get("to_stop_id")]
+		if missingKeys := row.MissingKeys(); len(missingKeys) > 0 {
+			log.Printf("Skipping transfer because of missing keys %s", missingKeys)
+			continue
+		}
+		if !fromStopOk {
+			log.Printf("Skipping transfer because from_stop_id %q is invalid", row.Get("from_stop_id"))
+			continue
+		}
+		if !toStopOk {
+			log.Printf("Skipping transfer because to_stop_id %q is invalid", row.Get("to_stop_id"))
+			continue
+		}
+		if fromStop.Id == toStop.Id {
+			log.Printf("Skipping transfer between the same stop %q", fromStop.Id)
+			continue
+		}
+		switch opts.FindStrategy(fromStop.Id, toStop.Id) {
+		case GroupStations:
+			updateGroupingMap(groupingMap, fromStop.Root().Id, toStop.Root().Id)
+		default:
+			transfer := Transfer{
+				From:            fromStop,
+				To:              toStop,
+				Type:            parseTransferType(row.GetOptional("transfer_type")),
+				MinTransferTime: parseInt32(row.GetOptional("min_transfer_time")),
+			}
+			transfers = append(transfers, transfer)
+		}
+	}
+	return transfers, buildGroupedStations(stopIdToStop, groupingMap)
+}
+
+func parseTransferType(raw *string) TransferType {
+	i := parseInt32(raw)
+	if i == nil {
+		return Recommended
+	}
+	t, _ := NewTransferType(*i)
+	return t
+}
+
+func parseInt32(raw *string) *int32 {
+	if raw == nil {
+		return nil
+	}
+	i, err := strconv.ParseInt(*raw, 10, 32)
+	if err != nil {
+		return nil
+	}
+	i32 := int32(i)
+	return &i32
+}
+
+func updateGroupingMap(m map[string]map[string]bool, stopId1, stopId2 string) {
+	allStops := map[string]bool{
+		stopId1: true,
+		stopId2: true,
+	}
+	for stopId := range m[stopId1] {
+		allStops[stopId] = true
+	}
+	for stopId := range m[stopId2] {
+		allStops[stopId] = true
+	}
+	for stopId := range allStops {
+		m[stopId] = allStops
+	}
+}
+
+func buildGroupedStations(existingStops map[string]*Stop, groupingMap map[string]map[string]bool) []Stop {
+	var newStops []Stop
+	var children []map[string]bool
+	newStopIds := map[string]bool{}
+	for _, stopIdsSet := range groupingMap {
+		var stopIds []string
+		for stopId := range stopIdsSet {
+			stopIds = append(stopIds, stopId)
+		}
+		sort.Strings(stopIds)
+		newStopId := strings.Join(stopIds, "-")
+		if _, alreadyCreated := newStopIds[newStopId]; alreadyCreated {
+			continue
+		}
+		newStopIds[newStopId] = true
+		children = append(children, stopIdsSet)
+		newStops = append(newStops, Stop{
+			Id:   newStopId,
+			Type: GroupedStation,
+		})
+	}
+	for i, childStopIds := range children {
+		for childStopId := range childStopIds {
+			existingStops[childStopId].Parent = &newStops[i]
+		}
+	}
+	return newStops
 }
