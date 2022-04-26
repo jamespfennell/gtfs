@@ -22,6 +22,7 @@ type Static struct {
 	Transfers       []Transfer
 	GroupedStations []Stop
 	Services        []Service
+	Trips           []ScheduledTrip
 }
 
 // AllStops returns a slice of pointers to all stops - both regular stops, and grouped stations.
@@ -336,14 +337,14 @@ type Service struct {
 }
 
 type ScheduledTrip struct {
-	Route               *Route
-	Service             *Service
-	ID                  string
-	Headsign            *string
-	ShortName           *string
-	DirectionId         bool
-	WheelchairAccesible *bool
-	BikesAllowed        *bool
+	Route                *Route
+	Service              *Service
+	ID                   string
+	Headsign             *string
+	ShortName            *string
+	DirectionId          *bool
+	WheelchairAccessible *bool
+	BikesAllowed         *bool
 }
 
 type ScheduledStopTime struct {
@@ -453,6 +454,12 @@ func ParseStatic(content []byte, opts ParseStaticOptions) (*Static, error) {
 				}
 			},
 			Optional: true,
+		},
+		{
+			File: "trips.txt",
+			Action: func(file *csv.File) {
+				result.Trips = parseScheduledTrips(file, result.Routes, result.Services)
+			},
 		},
 	} {
 		file, err := readCsvFile(fileNameToFile, table.File)
@@ -854,4 +861,53 @@ func parseCalendarDates(csv *csv.File, m map[string]Service, timezone *time.Loca
 
 func parseTime(s string, timezone *time.Location) (time.Time, error) {
 	return time.ParseInLocation("20060102", s, timezone)
+}
+
+func parseScheduledTrips(csv *csv.File, routes []Route, services []Service) []ScheduledTrip {
+	idToService := map[string]*Service{}
+	for i := range services {
+		idToService[services[i].Id] = &services[i]
+	}
+	idToRoute := map[string]*Route{}
+	for i := range routes {
+		idToRoute[routes[i].Id] = &routes[i]
+	}
+	fmt.Println(idToRoute)
+	var trips []ScheduledTrip
+	iter := csv.Iter()
+	for iter.Next() {
+		row := iter.Get()
+		trip := ScheduledTrip{
+			Route:                idToRoute[row.Get("route_id")],
+			Service:              idToService[row.Get("service_id")],
+			ID:                   row.Get("trip_id"),
+			Headsign:             row.GetOptional("trip_headsign"),
+			ShortName:            row.GetOptional("trip_short_name"),
+			DirectionId:          parseOptionalBool(row.GetOptional("direction_id"), map[string]bool{"0": false, "1": true}),
+			WheelchairAccessible: parseOptionalBool(row.GetOptional("wheelchair_accessible"), map[string]bool{"1": true, "2": false}),
+			BikesAllowed:         parseOptionalBool(row.GetOptional("bikes_allowed"), map[string]bool{"1": true, "2": false}),
+		}
+		if missingKeys := row.MissingKeys(); len(missingKeys) > 0 {
+			log.Printf("Skipping trip because of missing keys %s", missingKeys)
+			continue
+		}
+		if trip.Route == nil {
+			continue
+		}
+		if trip.Service == nil {
+			continue
+		}
+		trips = append(trips, trip)
+	}
+	return trips
+}
+
+func parseOptionalBool(s *string, m map[string]bool) *bool {
+	if s == nil {
+		return nil
+	}
+	if b, ok := m[*s]; ok {
+		return &b
+	}
+	return nil
 }

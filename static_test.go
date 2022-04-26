@@ -27,6 +27,18 @@ func TestParse(t *testing.T) {
 		Url:      "g",
 		Timezone: "h",
 	}
+	defaultRoute := Route{
+		Id:        "route_id",
+		Agency:    &defaultAgency,
+		Color:     "FFFFFF",
+		TextColor: "000000",
+		Type:      Bus,
+	}
+	defaultService := Service{
+		Id:        "service_id",
+		StartDate: may4,
+		EndDate:   may7,
+	}
 	for _, tc := range []struct {
 		desc     string
 		content  []byte
@@ -321,6 +333,41 @@ func TestParse(t *testing.T) {
 				},
 			},
 		},
+		{
+			desc: "trip",
+			content: newZipBuilder().add(
+				"agency.txt",
+				"agency_id,agency_name,agency_url,agency_timezone\na,b,c,d",
+			).add(
+				"routes.txt",
+				"route_id,route_type\nroute_id,3",
+			).add(
+				"calendar.txt",
+				"service_id,monday,tuesday,wednesday,thursday,friday,saturday,sunday,start_date,end_date\n"+
+					"service_id,0,0,0,0,0,0,0,20220504,20220507",
+			).add(
+				"trips.txt",
+				"route_id,service_id,trip_id,trip_headsign,trip_short_name,direction_id,wheelchair_accessible,bikes_allowed\n"+
+					"route_id,service_id,a,b,c,1,0,2",
+			).build(),
+			expected: &Static{
+				Agencies: []Agency{defaultAgency},
+				Routes:   []Route{defaultRoute},
+				Services: []Service{defaultService},
+				Trips: []ScheduledTrip{
+					{
+						Route:                &defaultRoute,
+						Service:              &defaultService,
+						ID:                   "a",
+						Headsign:             ptr("b"),
+						ShortName:            ptr("c"),
+						DirectionId:          boolPtr(true),
+						WheelchairAccessible: nil,
+						BikesAllowed:         boolPtr(false),
+					},
+				},
+			},
+		},
 	} {
 		t.Run(tc.desc, func(t *testing.T) {
 			actual, err := ParseStatic(tc.content, tc.opts)
@@ -347,6 +394,8 @@ func newZipBuilder() *zipBuilder {
 		"stops.txt", "stop_id",
 	).add(
 		"transfers.txt", "from_stop_id,to_stop_id",
+	).add(
+		"trips.txt", "route_id,service_id,trip_id",
 	)
 }
 
@@ -383,4 +432,8 @@ func intPtr(i int32) *int32 {
 
 func floatPtr(f float64) *float64 {
 	return &f
+}
+
+func boolPtr(b bool) *bool {
+	return &b
 }
