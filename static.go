@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/jamespfennell/gtfs/csv"
 )
@@ -306,6 +307,41 @@ func (t TransferType) String() string {
 	return "UNKNOWN"
 }
 
+type Service struct {
+	Id           string
+	Monday       bool
+	Tuesday      bool
+	Wednesday    bool
+	Thursday     bool
+	Friday       bool
+	Saturday     bool
+	Sunday       bool
+	StartDate    time.Time
+	EndDate      time.Time
+	AddedDates   []time.Time
+	RemovedDates []time.Time
+}
+
+type ScheduledTrip struct {
+	Route               *Route
+	Service             *Service
+	ID                  string
+	Headsign            *string
+	ShortName           *string
+	DirectionId         bool
+	WheelchairAccesible *bool
+	BikesAllowed        *bool
+}
+
+type ScheduledStopTime struct {
+	Trip          *ScheduledTrip
+	Stop          *Stop
+	ArrivalTime   *time.Duration
+	DepartureTime *time.Duration
+	StopSequence  int
+	Headsign      *string
+}
+
 type ParseStaticOptions struct {
 	TransfersOptions TransfersOptions
 }
@@ -347,40 +383,43 @@ func ParseStatic(content []byte, opts ParseStaticOptions) (*Static, error) {
 		fileNameToFile[file.Name] = file
 	}
 	for _, table := range []struct {
-		fileName string
-		action   func(file *csv.File)
+		File     string
+		Action   func(file *csv.File)
+		Optional bool
 	}{
 		{
-			"agency.txt",
-			func(file *csv.File) {
+			File: "agency.txt",
+			Action: func(file *csv.File) {
 				result.Agencies = parseAgencies(file)
 			},
 		},
 		{
-			"routes.txt",
-			func(file *csv.File) {
+			File: "routes.txt",
+			Action: func(file *csv.File) {
 				result.Routes = parseRoutes(file, result.Agencies)
 			},
 		},
 		{
-			"stops.txt",
-			func(file *csv.File) {
+			File: "stops.txt",
+			Action: func(file *csv.File) {
 				result.Stops = parseStops(file)
 			},
 		},
 		{
-			"transfers.txt",
-			func(file *csv.File) {
+			File: "transfers.txt",
+			Action: func(file *csv.File) {
 				result.Transfers, result.GroupedStations = parseTransfers(file, opts.TransfersOptions, result.Stops)
 			},
 		},
 	} {
-		file, err := readCsvFile(fileNameToFile, table.fileName)
-		if err != nil {
+		file, err := readCsvFile(fileNameToFile, table.File)
+		// TODO: not quite right; we need to make sure the error is recall a missing file error
+		if err != nil && !table.Optional {
 			return nil, err
 		}
-		table.action(file)
+		table.Action(file)
 	}
+
 	return result, nil
 }
 
