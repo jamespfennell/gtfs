@@ -798,8 +798,8 @@ func parseCalendar(csv *csv.File, m map[string]Service, timezone *time.Location)
 			Monday:    parseBool(row.Get("monday")),
 			Tuesday:   parseBool(row.Get("tuesday")),
 			Wednesday: parseBool(row.Get("wednesday")),
-			Thursday:  parseBool(row.Get("tuesday")),
-			Friday:    parseBool(row.Get("thursday")),
+			Thursday:  parseBool(row.Get("thursday")),
+			Friday:    parseBool(row.Get("friday")),
 			Saturday:  parseBool(row.Get("saturday")),
 			Sunday:    parseBool(row.Get("sunday")),
 			StartDate: startDate,
@@ -828,6 +828,7 @@ func parseCalendarDates(csv *csv.File, m map[string]Service, timezone *time.Loca
 			continue
 		}
 		service, ok := m[serviceId]
+		service.Id = serviceId
 		if !ok {
 			service.StartDate = date
 			service.EndDate = date
