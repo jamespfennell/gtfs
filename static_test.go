@@ -6,6 +6,7 @@ import (
 	"io"
 	"reflect"
 	"testing"
+	"time"
 )
 
 func TestParse(t *testing.T) {
@@ -273,6 +274,30 @@ func TestParse(t *testing.T) {
 				},
 			},
 		},
+		{
+			desc: "calendar.txt",
+			content: newZipBuilder().add(
+				"calendar.txt",
+				"service_id,monday,tuesday,wednesday,thursday,friday,saturday,sunday,start_date,end_date\n"+
+					"a,1,0,1,0,1,0,1,20220504,20220507",
+			).build(),
+			expected: &Static{
+				Services: []Service{
+					{
+						Id:        "a",
+						Monday:    true,
+						Tuesday:   false,
+						Wednesday: true,
+						Thursday:  false,
+						Friday:    true,
+						Saturday:  false,
+						Sunday:    true,
+						StartDate: time.Date(2022, 5, 4, 0, 0, 0, 0, time.UTC),
+						EndDate:   time.Date(2022, 5, 7, 0, 0, 0, 0, time.UTC),
+					},
+				},
+			},
+		},
 	} {
 		t.Run(tc.desc, func(t *testing.T) {
 			actual, err := ParseStatic(tc.content, tc.opts)
@@ -280,9 +305,6 @@ func TestParse(t *testing.T) {
 				t.Errorf("error when parsing: %s", err)
 			}
 			if !reflect.DeepEqual(actual, tc.expected) {
-				if !reflect.DeepEqual(actual.Stops[0], tc.expected.Stops[0]) {
-					t.Errorf("stops[0] not the same")
-				}
 				t.Errorf("not the same: \n%+v != \n%+v", actual, tc.expected)
 			}
 		})

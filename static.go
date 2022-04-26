@@ -21,6 +21,7 @@ type Static struct {
 	Stops           []Stop
 	Transfers       []Transfer
 	GroupedStations []Stop
+	Services        []Service
 }
 
 // Agency corresponds to a single row in the agency.txt file.
@@ -382,6 +383,8 @@ func ParseStatic(content []byte, opts ParseStaticOptions) (*Static, error) {
 	for _, file := range reader.File {
 		fileNameToFile[file.Name] = file
 	}
+	serviceIdToService := map[string]Service{}
+	timezone := time.UTC
 	for _, table := range []struct {
 		File     string
 		Action   func(file *csv.File)
@@ -391,6 +394,13 @@ func ParseStatic(content []byte, opts ParseStaticOptions) (*Static, error) {
 			File: "agency.txt",
 			Action: func(file *csv.File) {
 				result.Agencies = parseAgencies(file)
+				if len(result.Agencies) > 0 {
+					var err error
+					timezone, err = time.LoadLocation(result.Agencies[0].Timezone)
+					if err != nil {
+						timezone = time.UTC
+					}
+				}
 			},
 		},
 		{
@@ -411,9 +421,30 @@ func ParseStatic(content []byte, opts ParseStaticOptions) (*Static, error) {
 				result.Transfers, result.GroupedStations = parseTransfers(file, opts.TransfersOptions, result.Stops)
 			},
 		},
+		{
+			File: "calendar.txt",
+			Action: func(file *csv.File) {
+				if file != nil {
+					parseCalender(file, serviceIdToService, timezone)
+				}
+			},
+			Optional: true,
+		},
+		{
+			File: "calendar_dates.txt",
+			Action: func(file *csv.File) {
+				if file != nil {
+					parseCalenderDates(file, serviceIdToService, timezone)
+				}
+				for _, service := range serviceIdToService {
+					result.Services = append(result.Services, service)
+				}
+			},
+			Optional: true,
+		},
 	} {
 		file, err := readCsvFile(fileNameToFile, table.File)
-		// TODO: not quite right; we need to make sure the error is recall a missing file error
+		// TODO: not quite right; we need to make sure the error is a missing file error
 		if err != nil && !table.Optional {
 			return nil, err
 		}
@@ -733,4 +764,46 @@ func buildGroupedStations(existingStops map[string]*Stop, groupingMap map[string
 		}
 	}
 	return newStops
+}
+
+func parseCalender(csv *csv.File, m map[string]Service, timezone *time.Location) {
+	print("HERE")
+	parseBool := func(s string) bool {
+		return s == "1"
+	}
+	parseTime := func(s string) (time.Time, error) {
+		return time.ParseInLocation("20060102", s, timezone)
+	}
+	iter := csv.Iter()
+	for iter.Next() {
+		row := iter.Get()
+		startDate, err := parseTime(row.Get("start_date"))
+		if err != nil {
+			continue
+		}
+		endDate, err := parseTime(row.Get("end_date"))
+		if err != nil {
+			continue
+		}
+		service := Service{
+			Id:        row.Get("service_id"),
+			Monday:    parseBool(row.Get("monday")),
+			Tuesday:   parseBool(row.Get("tuesday")),
+			Wednesday: parseBool(row.Get("wednesday")),
+			Thursday:  parseBool(row.Get("tuesday")),
+			Friday:    parseBool(row.Get("thursday")),
+			Saturday:  parseBool(row.Get("saturday")),
+			Sunday:    parseBool(row.Get("sunday")),
+			StartDate: startDate,
+			EndDate:   endDate,
+		}
+		if missingKeys := row.MissingKeys(); len(missingKeys) > 0 {
+			log.Printf("Skipping calender because of missing keys %s", missingKeys)
+			continue
+		}
+		m[service.Id] = service
+	}
+}
+
+func parseCalenderDates(csv *csv.File, m map[string]Service, timezone *time.Location) {
 }
