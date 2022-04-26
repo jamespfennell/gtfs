@@ -24,6 +24,18 @@ type Static struct {
 	Services        []Service
 }
 
+// AllStops returns a slice of pointers to all stops - both regular stops, and grouped stations.
+func (s *Static) AllStops() []*Stop {
+	var result []*Stop
+	for i := range s.Stops {
+		result = append(result, &s.Stops[i])
+	}
+	for i := range s.GroupedStations {
+		result = append(result, &s.GroupedStations[i])
+	}
+	return result
+}
+
 // Agency corresponds to a single row in the agency.txt file.
 type Agency struct {
 	Id       string
