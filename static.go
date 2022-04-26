@@ -425,7 +425,7 @@ func ParseStatic(content []byte, opts ParseStaticOptions) (*Static, error) {
 			File: "calendar.txt",
 			Action: func(file *csv.File) {
 				if file != nil {
-					parseCalender(file, serviceIdToService, timezone)
+					parseCalendar(file, serviceIdToService, timezone)
 				}
 			},
 			Optional: true,
@@ -434,7 +434,7 @@ func ParseStatic(content []byte, opts ParseStaticOptions) (*Static, error) {
 			File: "calendar_dates.txt",
 			Action: func(file *csv.File) {
 				if file != nil {
-					parseCalenderDates(file, serviceIdToService, timezone)
+					parseCalendarDates(file, serviceIdToService, timezone)
 				}
 				for _, service := range serviceIdToService {
 					result.Services = append(result.Services, service)
@@ -766,22 +766,18 @@ func buildGroupedStations(existingStops map[string]*Stop, groupingMap map[string
 	return newStops
 }
 
-func parseCalender(csv *csv.File, m map[string]Service, timezone *time.Location) {
-	print("HERE")
+func parseCalendar(csv *csv.File, m map[string]Service, timezone *time.Location) {
 	parseBool := func(s string) bool {
 		return s == "1"
-	}
-	parseTime := func(s string) (time.Time, error) {
-		return time.ParseInLocation("20060102", s, timezone)
 	}
 	iter := csv.Iter()
 	for iter.Next() {
 		row := iter.Get()
-		startDate, err := parseTime(row.Get("start_date"))
+		startDate, err := parseTime(row.Get("start_date"), timezone)
 		if err != nil {
 			continue
 		}
-		endDate, err := parseTime(row.Get("end_date"))
+		endDate, err := parseTime(row.Get("end_date"), timezone)
 		if err != nil {
 			continue
 		}
@@ -798,12 +794,51 @@ func parseCalender(csv *csv.File, m map[string]Service, timezone *time.Location)
 			EndDate:   endDate,
 		}
 		if missingKeys := row.MissingKeys(); len(missingKeys) > 0 {
-			log.Printf("Skipping calender because of missing keys %s", missingKeys)
+			log.Printf("Skipping calendar because of missing keys %s", missingKeys)
 			continue
 		}
 		m[service.Id] = service
 	}
 }
 
-func parseCalenderDates(csv *csv.File, m map[string]Service, timezone *time.Location) {
+func parseCalendarDates(csv *csv.File, m map[string]Service, timezone *time.Location) {
+	iter := csv.Iter()
+	for iter.Next() {
+		row := iter.Get()
+		serviceId := row.Get("service_id")
+		date, err := parseTime(row.Get("date"), timezone)
+		if err != nil {
+			continue
+		}
+		exceptionType := row.Get("exception_type")
+		if missingKeys := row.MissingKeys(); len(missingKeys) > 0 {
+			log.Printf("Skipping calendar because of missing keys %s", missingKeys)
+			continue
+		}
+		service, ok := m[serviceId]
+		if !ok {
+			service.StartDate = date
+			service.EndDate = date
+		} else {
+			if date.Before(service.StartDate) {
+				service.StartDate = date
+			}
+			if service.EndDate.Before(date) {
+				service.EndDate = date
+			}
+		}
+		switch exceptionType {
+		case "1":
+			service.AddedDates = append(service.AddedDates, date)
+		case "2":
+			service.RemovedDates = append(service.RemovedDates, date)
+		default:
+			continue
+		}
+		m[service.Id] = service
+	}
+}
+
+func parseTime(s string, timezone *time.Location) (time.Time, error) {
+	return time.ParseInLocation("20060102", s, timezone)
 }

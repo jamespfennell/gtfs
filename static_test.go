@@ -9,6 +9,11 @@ import (
 	"time"
 )
 
+var (
+	may4 = time.Date(2022, 5, 4, 0, 0, 0, 0, time.UTC)
+	may7 = time.Date(2022, 5, 7, 0, 0, 0, 0, time.UTC)
+)
+
 func TestParse(t *testing.T) {
 	defaultAgency := Agency{
 		Id:       "a",
@@ -292,8 +297,26 @@ func TestParse(t *testing.T) {
 						Friday:    true,
 						Saturday:  false,
 						Sunday:    true,
-						StartDate: time.Date(2022, 5, 4, 0, 0, 0, 0, time.UTC),
-						EndDate:   time.Date(2022, 5, 7, 0, 0, 0, 0, time.UTC),
+						StartDate: may4,
+						EndDate:   may7,
+					},
+				},
+			},
+		},
+		{
+			desc: "calendar_dates.txt",
+			content: newZipBuilder().add(
+				"calendar_dates.txt",
+				"service_id,date,exception_type\na,20220504,1\na,20220507,2",
+			).build(),
+			expected: &Static{
+				Services: []Service{
+					{
+						Id:           "a",
+						StartDate:    may4,
+						EndDate:      may7,
+						AddedDates:   []time.Time{may4},
+						RemovedDates: []time.Time{may7},
 					},
 				},
 			},
