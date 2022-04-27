@@ -6,6 +6,12 @@ import (
 	"io"
 	"reflect"
 	"testing"
+	"time"
+)
+
+var (
+	may4 = time.Date(2022, 5, 4, 0, 0, 0, 0, time.UTC)
+	may7 = time.Date(2022, 5, 7, 0, 0, 0, 0, time.UTC)
 )
 
 func TestParse(t *testing.T) {
@@ -20,6 +26,21 @@ func TestParse(t *testing.T) {
 		Name:     "f",
 		Url:      "g",
 		Timezone: "h",
+	}
+	defaultRoute := Route{
+		Id:        "route_id",
+		Agency:    &defaultAgency,
+		Color:     "FFFFFF",
+		TextColor: "000000",
+		Type:      Bus,
+	}
+	defaultStop := Stop{
+		Id: "stop_id",
+	}
+	defaultService := Service{
+		Id:        "service_id",
+		StartDate: may4,
+		EndDate:   may7,
 	}
 	for _, tc := range []struct {
 		desc     string
@@ -273,6 +294,100 @@ func TestParse(t *testing.T) {
 				},
 			},
 		},
+		{
+			desc: "calendar.txt",
+			content: newZipBuilder().add(
+				"calendar.txt",
+				"service_id,monday,tuesday,wednesday,thursday,friday,saturday,sunday,start_date,end_date\n"+
+					"a,1,0,1,0,1,0,1,20220504,20220507",
+			).build(),
+			expected: &Static{
+				Services: []Service{
+					{
+						Id:        "a",
+						Monday:    true,
+						Tuesday:   false,
+						Wednesday: true,
+						Thursday:  false,
+						Friday:    true,
+						Saturday:  false,
+						Sunday:    true,
+						StartDate: may4,
+						EndDate:   may7,
+					},
+				},
+			},
+		},
+		{
+			desc: "calendar_dates.txt",
+			content: newZipBuilder().add(
+				"calendar_dates.txt",
+				"service_id,date,exception_type\na,20220504,1\na,20220507,2",
+			).build(),
+			expected: &Static{
+				Services: []Service{
+					{
+						Id:           "a",
+						StartDate:    may4,
+						EndDate:      may7,
+						AddedDates:   []time.Time{may4},
+						RemovedDates: []time.Time{may7},
+					},
+				},
+			},
+		},
+		{
+			desc: "trip",
+			content: newZipBuilder().add(
+				"agency.txt",
+				"agency_id,agency_name,agency_url,agency_timezone\na,b,c,d",
+			).add(
+				"routes.txt",
+				"route_id,route_type\nroute_id,3",
+			).add(
+				"stops.txt",
+				"stop_id\nstop_id",
+			).add(
+				"calendar.txt",
+				"service_id,monday,tuesday,wednesday,thursday,friday,saturday,sunday,start_date,end_date\n"+
+					"service_id,0,0,0,0,0,0,0,20220504,20220507",
+			).add(
+				"trips.txt",
+				"route_id,service_id,trip_id,trip_headsign,trip_short_name,direction_id,wheelchair_accessible,bikes_allowed\n"+
+					"route_id,service_id,a,b,c,1,0,2",
+			).add(
+				"stop_times.txt",
+				"stop_id,trip_id,arrival_time,departure_time,stop_sequence,stop_headsign\n"+
+					"stop_id,a,04:05:06,13:14:15,50,b",
+			).build(),
+			expected: &Static{
+				Agencies: []Agency{defaultAgency},
+				Routes:   []Route{defaultRoute},
+				Services: []Service{defaultService},
+				Stops:    []Stop{defaultStop},
+				Trips: []ScheduledTrip{
+					{
+						Route:                &defaultRoute,
+						Service:              &defaultService,
+						ID:                   "a",
+						Headsign:             ptr("b"),
+						ShortName:            ptr("c"),
+						DirectionId:          boolPtr(true),
+						WheelchairAccessible: nil,
+						BikesAllowed:         boolPtr(false),
+						StopTimes: []ScheduledStopTime{
+							{
+								Stop:          &defaultStop,
+								Headsign:      ptr("b"),
+								StopSequence:  50,
+								ArrivalTime:   4*time.Hour + 5*time.Minute + 6*time.Second,
+								DepartureTime: 13*time.Hour + 14*time.Minute + 15*time.Second,
+							},
+						},
+					},
+				},
+			},
+		},
 	} {
 		t.Run(tc.desc, func(t *testing.T) {
 			actual, err := ParseStatic(tc.content, tc.opts)
@@ -280,9 +395,6 @@ func TestParse(t *testing.T) {
 				t.Errorf("error when parsing: %s", err)
 			}
 			if !reflect.DeepEqual(actual, tc.expected) {
-				if !reflect.DeepEqual(actual.Stops[0], tc.expected.Stops[0]) {
-					t.Errorf("stops[0] not the same")
-				}
 				t.Errorf("not the same: \n%+v != \n%+v", actual, tc.expected)
 			}
 		})
@@ -302,6 +414,10 @@ func newZipBuilder() *zipBuilder {
 		"stops.txt", "stop_id",
 	).add(
 		"transfers.txt", "from_stop_id,to_stop_id",
+	).add(
+		"trips.txt", "route_id,service_id,trip_id",
+	).add(
+		"stop_times.txt", "stop_id,trip_id",
 	)
 }
 
@@ -338,4 +454,8 @@ func intPtr(i int32) *int32 {
 
 func floatPtr(f float64) *float64 {
 	return &f
+}
+
+func boolPtr(b bool) *bool {
+	return &b
 }

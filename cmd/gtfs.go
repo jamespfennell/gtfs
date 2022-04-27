@@ -21,6 +21,18 @@ func main() {
 				Usage: "parse a GTFS static message",
 				Action: func(*cli.Context) error {
 					fmt.Print("static")
+					path := "google_transit.zip"
+					b, err := os.ReadFile(path)
+					if err != nil {
+						return fmt.Errorf("failed to read file %s: %w", path, err)
+					}
+					start := time.Now()
+					static, err := gtfs.ParseStatic(b, gtfs.ParseStaticOptions{})
+					if err != nil {
+						return fmt.Errorf("failed to parse GTFS static data: %w", err)
+					}
+					fmt.Println("Num trips", len(static.Trips))
+					fmt.Println("Took", time.Since(start))
 					return nil
 				},
 			},

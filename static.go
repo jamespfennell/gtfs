@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/jamespfennell/gtfs/csv"
 )
@@ -20,6 +21,20 @@ type Static struct {
 	Stops           []Stop
 	Transfers       []Transfer
 	GroupedStations []Stop
+	Services        []Service
+	Trips           []ScheduledTrip
+}
+
+// AllStops returns a slice of pointers to all stops - both regular stops, and grouped stations.
+func (s *Static) AllStops() []*Stop {
+	var result []*Stop
+	for i := range s.Stops {
+		result = append(result, &s.Stops[i])
+	}
+	for i := range s.GroupedStations {
+		result = append(result, &s.GroupedStations[i])
+	}
+	return result
 }
 
 // Agency corresponds to a single row in the agency.txt file.
@@ -306,6 +321,61 @@ func (t TransferType) String() string {
 	return "UNKNOWN"
 }
 
+type Service struct {
+	Id           string
+	Monday       bool
+	Tuesday      bool
+	Wednesday    bool
+	Thursday     bool
+	Friday       bool
+	Saturday     bool
+	Sunday       bool
+	StartDate    time.Time
+	EndDate      time.Time
+	AddedDates   []time.Time
+	RemovedDates []time.Time
+}
+
+type ScheduledTrip struct {
+	Route                *Route
+	Service              *Service
+	ID                   string
+	Headsign             *string
+	ShortName            *string
+	DirectionId          *bool
+	WheelchairAccessible *bool
+	BikesAllowed         *bool
+	StopTimes            []ScheduledStopTime
+}
+
+type ScheduledStopTime struct {
+	Trip          *ScheduledTrip
+	Stop          *Stop
+	ArrivalTime   time.Duration
+	DepartureTime time.Duration
+	StopSequence  int
+	Headsign      *string
+}
+
+// SortScheduledStopTimes sorts the provided stop times based on the stop sequence field.
+func SortScheduledStopTimes(stopTimes []ScheduledStopTime) {
+	sort.Sort(scheduledStopTimeSorter(stopTimes))
+}
+
+type scheduledStopTimeSorter []ScheduledStopTime
+
+func (s scheduledStopTimeSorter) Len() int {
+	return len([]ScheduledStopTime(s))
+}
+
+func (s scheduledStopTimeSorter) Less(i, j int) bool {
+	return s[i].StopSequence < s[j].StopSequence
+}
+
+func (s scheduledStopTimeSorter) Swap(i, j int) {
+	s[i], s[j] = s[j], s[i]
+}
+
 type ParseStaticOptions struct {
 	TransfersOptions TransfersOptions
 }
@@ -346,41 +416,86 @@ func ParseStatic(content []byte, opts ParseStaticOptions) (*Static, error) {
 	for _, file := range reader.File {
 		fileNameToFile[file.Name] = file
 	}
+	serviceIdToService := map[string]Service{}
+	timezone := time.UTC
 	for _, table := range []struct {
-		fileName string
-		action   func(file *csv.File)
+		File     string
+		Action   func(file *csv.File)
+		Optional bool
 	}{
 		{
-			"agency.txt",
-			func(file *csv.File) {
+			File: "agency.txt",
+			Action: func(file *csv.File) {
 				result.Agencies = parseAgencies(file)
+				if len(result.Agencies) > 0 {
+					var err error
+					timezone, err = time.LoadLocation(result.Agencies[0].Timezone)
+					if err != nil {
+						timezone = time.UTC
+					}
+				}
 			},
 		},
 		{
-			"routes.txt",
-			func(file *csv.File) {
+			File: "routes.txt",
+			Action: func(file *csv.File) {
 				result.Routes = parseRoutes(file, result.Agencies)
 			},
 		},
 		{
-			"stops.txt",
-			func(file *csv.File) {
+			File: "stops.txt",
+			Action: func(file *csv.File) {
 				result.Stops = parseStops(file)
 			},
 		},
 		{
-			"transfers.txt",
-			func(file *csv.File) {
+			File: "transfers.txt",
+			Action: func(file *csv.File) {
 				result.Transfers, result.GroupedStations = parseTransfers(file, opts.TransfersOptions, result.Stops)
 			},
 		},
+		{
+			File: "calendar.txt",
+			Action: func(file *csv.File) {
+				if file != nil {
+					parseCalendar(file, serviceIdToService, timezone)
+				}
+			},
+			Optional: true,
+		},
+		{
+			File: "calendar_dates.txt",
+			Action: func(file *csv.File) {
+				if file != nil {
+					parseCalendarDates(file, serviceIdToService, timezone)
+				}
+				for _, service := range serviceIdToService {
+					result.Services = append(result.Services, service)
+				}
+			},
+			Optional: true,
+		},
+		{
+			File: "trips.txt",
+			Action: func(file *csv.File) {
+				result.Trips = parseScheduledTrips(file, result.Routes, result.Services)
+			},
+		},
+		{
+			File: "stop_times.txt",
+			Action: func(file *csv.File) {
+				parseScheduledStopTimes(file, result.Stops, result.Trips)
+			},
+		},
 	} {
-		file, err := readCsvFile(fileNameToFile, table.fileName)
-		if err != nil {
+		file, err := readCsvFile(fileNameToFile, table.File)
+		// TODO: not quite right; we need to make sure the error is a missing file error
+		if err != nil && !table.Optional {
 			return nil, err
 		}
-		table.action(file)
+		table.Action(file)
 	}
+
 	return result, nil
 }
 
@@ -394,10 +509,12 @@ func readCsvFile(fileNameToFile map[string]*zip.File, fileName string) (*csv.Fil
 		return nil, err
 	}
 	defer content.Close()
+	// start := time.Now()
 	f, err := csv.New(content)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse %q: %w", fileName, err)
 	}
+	// fmt.Println("Read", fileName, time.Since(start))
 	return f, nil
 }
 
@@ -694,4 +811,205 @@ func buildGroupedStations(existingStops map[string]*Stop, groupingMap map[string
 		}
 	}
 	return newStops
+}
+
+func parseCalendar(csv *csv.File, m map[string]Service, timezone *time.Location) {
+	parseBool := func(s string) bool {
+		return s == "1"
+	}
+	iter := csv.Iter()
+	for iter.Next() {
+		row := iter.Get()
+		startDate, err := parseTime(row.Get("start_date"), timezone)
+		if err != nil {
+			continue
+		}
+		endDate, err := parseTime(row.Get("end_date"), timezone)
+		if err != nil {
+			continue
+		}
+		service := Service{
+			Id:        row.Get("service_id"),
+			Monday:    parseBool(row.Get("monday")),
+			Tuesday:   parseBool(row.Get("tuesday")),
+			Wednesday: parseBool(row.Get("wednesday")),
+			Thursday:  parseBool(row.Get("thursday")),
+			Friday:    parseBool(row.Get("friday")),
+			Saturday:  parseBool(row.Get("saturday")),
+			Sunday:    parseBool(row.Get("sunday")),
+			StartDate: startDate,
+			EndDate:   endDate,
+		}
+		if missingKeys := row.MissingKeys(); len(missingKeys) > 0 {
+			log.Printf("Skipping calendar because of missing keys %s", missingKeys)
+			continue
+		}
+		m[service.Id] = service
+	}
+}
+
+func parseCalendarDates(csv *csv.File, m map[string]Service, timezone *time.Location) {
+	iter := csv.Iter()
+	for iter.Next() {
+		row := iter.Get()
+		serviceId := row.Get("service_id")
+		date, err := parseTime(row.Get("date"), timezone)
+		if err != nil {
+			continue
+		}
+		exceptionType := row.Get("exception_type")
+		if missingKeys := row.MissingKeys(); len(missingKeys) > 0 {
+			log.Printf("Skipping calendar because of missing keys %s", missingKeys)
+			continue
+		}
+		service, ok := m[serviceId]
+		service.Id = serviceId
+		if !ok {
+			service.StartDate = date
+			service.EndDate = date
+		} else {
+			if date.Before(service.StartDate) {
+				service.StartDate = date
+			}
+			if service.EndDate.Before(date) {
+				service.EndDate = date
+			}
+		}
+		switch exceptionType {
+		case "1":
+			service.AddedDates = append(service.AddedDates, date)
+		case "2":
+			service.RemovedDates = append(service.RemovedDates, date)
+		default:
+			continue
+		}
+		m[service.Id] = service
+	}
+}
+
+func parseTime(s string, timezone *time.Location) (time.Time, error) {
+	return time.ParseInLocation("20060102", s, timezone)
+}
+
+func parseScheduledTrips(csv *csv.File, routes []Route, services []Service) []ScheduledTrip {
+	idToService := map[string]*Service{}
+	for i := range services {
+		idToService[services[i].Id] = &services[i]
+	}
+	idToRoute := map[string]*Route{}
+	for i := range routes {
+		idToRoute[routes[i].Id] = &routes[i]
+	}
+	var trips []ScheduledTrip
+	iter := csv.Iter()
+	for iter.Next() {
+		row := iter.Get()
+		trip := ScheduledTrip{
+			Route:                idToRoute[row.Get("route_id")],
+			Service:              idToService[row.Get("service_id")],
+			ID:                   row.Get("trip_id"),
+			Headsign:             row.GetOptional("trip_headsign"),
+			ShortName:            row.GetOptional("trip_short_name"),
+			DirectionId:          parseOptionalBool(row.GetOptional("direction_id"), map[string]bool{"0": false, "1": true}),
+			WheelchairAccessible: parseOptionalBool(row.GetOptional("wheelchair_accessible"), map[string]bool{"1": true, "2": false}),
+			BikesAllowed:         parseOptionalBool(row.GetOptional("bikes_allowed"), map[string]bool{"1": true, "2": false}),
+		}
+		if missingKeys := row.MissingKeys(); len(missingKeys) > 0 {
+			log.Printf("Skipping trip because of missing keys %s", missingKeys)
+			continue
+		}
+		if trip.Route == nil {
+			continue
+		}
+		if trip.Service == nil {
+			continue
+		}
+		trips = append(trips, trip)
+	}
+	return trips
+}
+
+func parseOptionalBool(s *string, m map[string]bool) *bool {
+	if s == nil {
+		return nil
+	}
+	if b, ok := m[*s]; ok {
+		return &b
+	}
+	return nil
+}
+
+func parseScheduledStopTimes(csv *csv.File, stops []Stop, trips []ScheduledTrip) {
+	idToStop := map[string]*Stop{}
+	for i := range stops {
+		idToStop[stops[i].Id] = &stops[i]
+	}
+	idToTrip := map[string]*ScheduledTrip{}
+	for i := range trips {
+		idToTrip[trips[i].ID] = &trips[i]
+	}
+	iter := csv.Iter()
+	for iter.Next() {
+		row := iter.Get()
+		arrival, arrivalOk := parseStopTimeDuration(row.GetOptional("arrival_time"))
+		departure, departueOk := parseStopTimeDuration(row.GetOptional("departure_time"))
+		if !arrivalOk && !departueOk {
+			continue
+		}
+		if !departueOk {
+			arrival = departure
+		}
+		if !arrivalOk {
+			departure = arrival
+		}
+		stopSequence, err := strconv.Atoi(row.Get("stop_sequence"))
+		if err != nil {
+			continue
+		}
+		stopTime := ScheduledStopTime{
+			Stop:          idToStop[row.Get("stop_id")],
+			Headsign:      row.GetOptional("stop_headsign"),
+			ArrivalTime:   arrival,
+			StopSequence:  stopSequence,
+			DepartureTime: departure,
+		}
+		trip := idToTrip[row.Get("trip_id")]
+		if missingKeys := row.MissingKeys(); len(missingKeys) > 0 {
+			log.Printf("Skipping stop time because of missing keys %s", missingKeys)
+			continue
+		}
+		if stopTime.Stop == nil {
+			continue
+		}
+		if trip == nil {
+			continue
+		}
+		trip.StopTimes = append(trip.StopTimes, stopTime)
+	}
+	for _, trip := range idToTrip {
+		SortScheduledStopTimes(trip.StopTimes)
+	}
+}
+
+func parseStopTimeDuration(s *string) (time.Duration, bool) {
+	if s == nil {
+		return 0, false
+	}
+	pieces := strings.Split(*s, ":")
+	if len(pieces) != 3 {
+		return 0, false
+	}
+	hours, err := strconv.Atoi(pieces[0])
+	if err != nil {
+		return 0, false
+	}
+	minutes, err := strconv.Atoi(pieces[1])
+	if err != nil {
+		return 0, false
+	}
+	seconds, err := strconv.Atoi(pieces[2])
+	if err != nil {
+		return 0, false
+	}
+	return time.Duration((hours*60+minutes)*60+seconds) * time.Second, true
 }
