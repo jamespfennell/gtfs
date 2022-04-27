@@ -351,8 +351,8 @@ type ScheduledTrip struct {
 type ScheduledStopTime struct {
 	Trip          *ScheduledTrip
 	Stop          *Stop
-	ArrivalTime   *time.Duration
-	DepartureTime *time.Duration
+	ArrivalTime   time.Duration
+	DepartureTime time.Duration
 	StopSequence  int
 	Headsign      *string
 }
@@ -951,9 +951,27 @@ func parseScheduledStopTimes(csv *csv.File, stops []Stop, trips []ScheduledTrip)
 	iter := csv.Iter()
 	for iter.Next() {
 		row := iter.Get()
+		arrival, arrivalOk := parseStopTimeDuration(row.GetOptional("arrival_time"))
+		departure, departueOk := parseStopTimeDuration(row.GetOptional("departure_time"))
+		if !arrivalOk && !departueOk {
+			continue
+		}
+		if !departueOk {
+			arrival = departure
+		}
+		if !arrivalOk {
+			departure = arrival
+		}
+		stopSequence, err := strconv.Atoi(row.Get("stop_sequence"))
+		if err != nil {
+			continue
+		}
 		stopTime := ScheduledStopTime{
-			Stop:     idToStop[row.Get("stop_id")],
-			Headsign: row.GetOptional("stop_headsign"),
+			Stop:          idToStop[row.Get("stop_id")],
+			Headsign:      row.GetOptional("stop_headsign"),
+			ArrivalTime:   arrival,
+			StopSequence:  stopSequence,
+			DepartureTime: departure,
 		}
 		trip := idToTrip[row.Get("trip_id")]
 		if missingKeys := row.MissingKeys(); len(missingKeys) > 0 {
@@ -971,4 +989,27 @@ func parseScheduledStopTimes(csv *csv.File, stops []Stop, trips []ScheduledTrip)
 	for _, trip := range idToTrip {
 		SortScheduledStopTimes(trip.StopTimes)
 	}
+}
+
+func parseStopTimeDuration(s *string) (time.Duration, bool) {
+	if s == nil {
+		return 0, false
+	}
+	pieces := strings.Split(*s, ":")
+	if len(pieces) != 3 {
+		return 0, false
+	}
+	hours, err := strconv.Atoi(pieces[0])
+	if err != nil {
+		return 0, false
+	}
+	minutes, err := strconv.Atoi(pieces[1])
+	if err != nil {
+		return 0, false
+	}
+	seconds, err := strconv.Atoi(pieces[2])
+	if err != nil {
+		return 0, false
+	}
+	return time.Duration((hours*60+minutes)*60+seconds) * time.Second, true
 }

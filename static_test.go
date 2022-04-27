@@ -377,8 +377,11 @@ func TestParse(t *testing.T) {
 						BikesAllowed:         boolPtr(false),
 						StopTimes: []ScheduledStopTime{
 							{
-								Stop:     &defaultStop,
-								Headsign: ptr("b"),
+								Stop:          &defaultStop,
+								Headsign:      ptr("b"),
+								StopSequence:  50,
+								ArrivalTime:   4*time.Hour + 5*time.Minute + 6*time.Second,
+								DepartureTime: 13*time.Hour + 14*time.Minute + 15*time.Second,
 							},
 						},
 					},
