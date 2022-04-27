@@ -345,6 +345,7 @@ type ScheduledTrip struct {
 	DirectionId          *bool
 	WheelchairAccessible *bool
 	BikesAllowed         *bool
+	StopTimes            []ScheduledStopTime
 }
 
 type ScheduledStopTime struct {
@@ -354,6 +355,25 @@ type ScheduledStopTime struct {
 	DepartureTime *time.Duration
 	StopSequence  int
 	Headsign      *string
+}
+
+// SortScheduledStopTimes sorts the provided stop times based on the stop sequence field.
+func SortScheduledStopTimes(stopTimes []ScheduledStopTime) {
+	sort.Sort(scheduledStopTimeSorter(stopTimes))
+}
+
+type scheduledStopTimeSorter []ScheduledStopTime
+
+func (s scheduledStopTimeSorter) Len() int {
+	return len([]ScheduledStopTime(s))
+}
+
+func (s scheduledStopTimeSorter) Less(i, j int) bool {
+	return s[i].StopSequence < s[j].StopSequence
+}
+
+func (s scheduledStopTimeSorter) Swap(i, j int) {
+	s[i], s[j] = s[j], s[i]
 }
 
 type ParseStaticOptions struct {
@@ -461,6 +481,12 @@ func ParseStatic(content []byte, opts ParseStaticOptions) (*Static, error) {
 				result.Trips = parseScheduledTrips(file, result.Routes, result.Services)
 			},
 		},
+		{
+			File: "stop_times.txt",
+			Action: func(file *csv.File) {
+				parseScheduledStopTimes(file, result.Stops, result.Trips)
+			},
+		},
 	} {
 		file, err := readCsvFile(fileNameToFile, table.File)
 		// TODO: not quite right; we need to make sure the error is a missing file error
@@ -483,10 +509,12 @@ func readCsvFile(fileNameToFile map[string]*zip.File, fileName string) (*csv.Fil
 		return nil, err
 	}
 	defer content.Close()
+	// start := time.Now()
 	f, err := csv.New(content)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse %q: %w", fileName, err)
 	}
+	// fmt.Println("Read", fileName, time.Since(start))
 	return f, nil
 }
 
@@ -872,7 +900,6 @@ func parseScheduledTrips(csv *csv.File, routes []Route, services []Service) []Sc
 	for i := range routes {
 		idToRoute[routes[i].Id] = &routes[i]
 	}
-	fmt.Println(idToRoute)
 	var trips []ScheduledTrip
 	iter := csv.Iter()
 	for iter.Next() {
@@ -910,4 +937,38 @@ func parseOptionalBool(s *string, m map[string]bool) *bool {
 		return &b
 	}
 	return nil
+}
+
+func parseScheduledStopTimes(csv *csv.File, stops []Stop, trips []ScheduledTrip) {
+	idToStop := map[string]*Stop{}
+	for i := range stops {
+		idToStop[stops[i].Id] = &stops[i]
+	}
+	idToTrip := map[string]*ScheduledTrip{}
+	for i := range trips {
+		idToTrip[trips[i].ID] = &trips[i]
+	}
+	iter := csv.Iter()
+	for iter.Next() {
+		row := iter.Get()
+		stopTime := ScheduledStopTime{
+			Stop:     idToStop[row.Get("stop_id")],
+			Headsign: row.GetOptional("stop_headsign"),
+		}
+		trip := idToTrip[row.Get("trip_id")]
+		if missingKeys := row.MissingKeys(); len(missingKeys) > 0 {
+			log.Printf("Skipping stop time because of missing keys %s", missingKeys)
+			continue
+		}
+		if stopTime.Stop == nil {
+			continue
+		}
+		if trip == nil {
+			continue
+		}
+		trip.StopTimes = append(trip.StopTimes, stopTime)
+	}
+	for _, trip := range idToTrip {
+		SortScheduledStopTimes(trip.StopTimes)
+	}
 }

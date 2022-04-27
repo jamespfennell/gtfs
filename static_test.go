@@ -34,6 +34,9 @@ func TestParse(t *testing.T) {
 		TextColor: "000000",
 		Type:      Bus,
 	}
+	defaultStop := Stop{
+		Id: "stop_id",
+	}
 	defaultService := Service{
 		Id:        "service_id",
 		StartDate: may4,
@@ -342,6 +345,9 @@ func TestParse(t *testing.T) {
 				"routes.txt",
 				"route_id,route_type\nroute_id,3",
 			).add(
+				"stops.txt",
+				"stop_id\nstop_id",
+			).add(
 				"calendar.txt",
 				"service_id,monday,tuesday,wednesday,thursday,friday,saturday,sunday,start_date,end_date\n"+
 					"service_id,0,0,0,0,0,0,0,20220504,20220507",
@@ -349,11 +355,16 @@ func TestParse(t *testing.T) {
 				"trips.txt",
 				"route_id,service_id,trip_id,trip_headsign,trip_short_name,direction_id,wheelchair_accessible,bikes_allowed\n"+
 					"route_id,service_id,a,b,c,1,0,2",
+			).add(
+				"stop_times.txt",
+				"stop_id,trip_id,arrival_time,departure_time,stop_sequence,stop_headsign\n"+
+					"stop_id,a,04:05:06,13:14:15,50,b",
 			).build(),
 			expected: &Static{
 				Agencies: []Agency{defaultAgency},
 				Routes:   []Route{defaultRoute},
 				Services: []Service{defaultService},
+				Stops:    []Stop{defaultStop},
 				Trips: []ScheduledTrip{
 					{
 						Route:                &defaultRoute,
@@ -364,6 +375,12 @@ func TestParse(t *testing.T) {
 						DirectionId:          boolPtr(true),
 						WheelchairAccessible: nil,
 						BikesAllowed:         boolPtr(false),
+						StopTimes: []ScheduledStopTime{
+							{
+								Stop:     &defaultStop,
+								Headsign: ptr("b"),
+							},
+						},
 					},
 				},
 			},
@@ -396,6 +413,8 @@ func newZipBuilder() *zipBuilder {
 		"transfers.txt", "from_stop_id,to_stop_id",
 	).add(
 		"trips.txt", "route_id,service_id,trip_id",
+	).add(
+		"stop_times.txt", "stop_id,trip_id",
 	)
 }
 
