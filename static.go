@@ -274,6 +274,16 @@ func NewWheelchairBoarding(i int) (WheelchairBoarding, bool) {
 	return t, true
 }
 
+func (w WheelchairBoarding) String() string {
+	switch w {
+	case Possible:
+		return "POSSIBLE"
+	case NotPossible:
+		return "NOT_POSSIBLE"
+	}
+	return "NOT_SPECIFIED"
+}
+
 type Transfer struct {
 	From            *Stop
 	To              *Stop
