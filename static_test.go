@@ -178,7 +178,7 @@ func TestParse(t *testing.T) {
 						Description:        ptr("d"),
 						ZoneId:             ptr("e"),
 						Longitude:          floatPtr(1.5),
-						Lattitude:          floatPtr(2.5),
+						Latitude:           floatPtr(2.5),
 						Url:                ptr("f"),
 						Type:               Station,
 						Timezone:           ptr("g"),

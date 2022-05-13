@@ -185,7 +185,7 @@ type Stop struct {
 	Description        *string
 	ZoneId             *string
 	Longitude          *float64
-	Lattitude          *float64
+	Latitude           *float64
 	Url                *string
 	Type               StopType
 	Parent             *Stop
@@ -640,7 +640,7 @@ func parseStops(csv *csv.File) []Stop {
 			Description:        row.GetOptional("stop_desc"),
 			ZoneId:             row.GetOptional("zone_id"),
 			Longitude:          parseFloat64(row.GetOptional("stop_lon")),
-			Lattitude:          parseFloat64(row.GetOptional("stop_lat")),
+			Latitude:           parseFloat64(row.GetOptional("stop_lat")),
 			Url:                row.GetOptional("stop_url"),
 			Type:               parseStopType(row.GetOptional("location_type")),
 			Timezone:           row.GetOptional("stop_timezone"),
