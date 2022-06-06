@@ -65,6 +65,24 @@ func setVehicleDescriptor(entity HasTripDescriptor, vehicleDesc *gtfsrt.VehicleD
 	}
 }
 
+func IsStaleUnassignedTrip(isAssigned bool, stopTimes []*gtfsrt.TripUpdate_StopTimeUpdate, feedCreatedAt uint64) bool {
+	if isAssigned {
+		return false
+	}
+	if len(stopTimes) == 0 {
+		return true
+	}
+	stopTime := stopTimes[0]
+	firstTime := stopTime.GetDeparture().GetTime()
+	if firstTime == 0 {
+		firstTime = stopTime.GetArrival().GetTime()
+	}
+	if firstTime == 0 {
+		return true
+	}
+	return firstTime < int64(feedCreatedAt)
+}
+
 func GetTrack(stopTimeUpdate *gtfsrt.TripUpdate_StopTimeUpdate) *string {
 	if !proto.HasExtension(stopTimeUpdate, gtfsrt.E_NyctStopTimeUpdate) {
 		return nil

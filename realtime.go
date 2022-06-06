@@ -31,7 +31,7 @@ func (d DirectionID) String() string {
 
 // Realtime contains the parsed content for a single GTFS realtime message.
 type Realtime struct {
-	CreatedAt *time.Time
+	CreatedAt time.Time
 
 	Trips []Trip
 
@@ -131,6 +131,10 @@ type ParseRealtimeOptions struct {
 
 	// Whether to use the New York City Transit extensions.
 	UseNyctExtension bool
+
+	// If true, trips that are unassigned and should be running will be skipped.
+	// This addresses a data bug in the NYCT feeds.
+	NyctFilterStaleUnassignedTrips bool
 }
 
 func (opts *ParseRealtimeOptions) timezoneOrUTC() *time.Location {
@@ -145,6 +149,12 @@ func ParseRealtime(content []byte, opts *ParseRealtimeOptions) (*Realtime, error
 	if err := proto.Unmarshal(content, feedMessage); err != nil {
 		return nil, fmt.Errorf("failed to parse input as a GTFS Realtime message: %s", err)
 	}
+	var result Realtime
+	if t := feedMessage.GetHeader().Timestamp; t != nil {
+		createdAt := time.Unix(int64(*t), 0).In(opts.timezoneOrUTC())
+		result.CreatedAt = createdAt
+	}
+
 	tripsById := map[TripID]*Trip{}
 	vehiclesByID := map[VehicleID]*Vehicle{}
 	tripIDToVehicleID := map[TripID]VehicleID{}
@@ -156,7 +166,7 @@ func ParseRealtime(content []byte, opts *ParseRealtimeOptions) (*Realtime, error
 		var ok bool
 
 		if tripUpdate := entity.TripUpdate; tripUpdate != nil {
-			trip, vehicle, ok = parseTripUpdate(tripUpdate, opts)
+			trip, vehicle, ok = parseTripUpdate(tripUpdate, opts, feedMessage.GetHeader().GetTimestamp())
 		} else if vehiclePosition := entity.Vehicle; vehicle != nil {
 			trip, vehicle, ok = parseVehicle(vehiclePosition, opts)
 		} else if alert := entity.Alert; alert != nil {
@@ -198,11 +208,6 @@ func ParseRealtime(content []byte, opts *ParseRealtimeOptions) (*Realtime, error
 		}
 	}
 
-	var result Realtime
-	if t := feedMessage.GetHeader().Timestamp; t != nil {
-		createdAt := time.Unix(int64(*t), 0).In(opts.timezoneOrUTC())
-		result.CreatedAt = &createdAt
-	}
 	for tripID, trip := range tripsById {
 		if vehicleID, ok := tripIDToVehicleID[tripID]; ok {
 			trip.Vehicle = vehiclesByID[vehicleID]
@@ -219,13 +224,16 @@ func ParseRealtime(content []byte, opts *ParseRealtimeOptions) (*Realtime, error
 	return &result, nil
 }
 
-func parseTripUpdate(tripUpdate *gtfsrt.TripUpdate, opts *ParseRealtimeOptions) (*Trip, *Vehicle, bool) {
+func parseTripUpdate(tripUpdate *gtfsrt.TripUpdate, opts *ParseRealtimeOptions, feedCreatedAt uint64) (*Trip, *Vehicle, bool) {
 	if tripUpdate.Trip == nil {
 		return nil, nil, false
 	}
 	var nyctIsAssigned bool
 	if opts.UseNyctExtension {
 		nyctIsAssigned = nyct.UpdateDescriptors(tripUpdate)
+		if opts.NyctFilterStaleUnassignedTrips && nyct.IsStaleUnassignedTrip(nyctIsAssigned, tripUpdate.StopTimeUpdate, feedCreatedAt) {
+			return nil, nil, false
+		}
 	}
 	trip := &Trip{
 		ID:                parseTripDescriptor(tripUpdate.Trip, opts),

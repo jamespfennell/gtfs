@@ -105,6 +105,87 @@ func TestGetTrack(t *testing.T) {
 	}
 }
 
+func TestFilterStaleUnassignedTrips(t *testing.T) {
+	feedTime := uint64(1000)
+	beforeFeedTime := int64(500)
+	afterFeedTime := int64(1500)
+	testCases := []struct {
+		FirstStopTime    *gtfsrt.TripUpdate_StopTimeUpdate
+		ExpectedNumTrips int
+	}{
+		{
+			FirstStopTime: &gtfsrt.TripUpdate_StopTimeUpdate{
+				Departure: &gtfsrt.TripUpdate_StopTimeEvent{
+					Time: &beforeFeedTime,
+				},
+			},
+			ExpectedNumTrips: 0,
+		},
+		{
+			FirstStopTime: &gtfsrt.TripUpdate_StopTimeUpdate{
+				Departure: &gtfsrt.TripUpdate_StopTimeEvent{
+					Time: &afterFeedTime,
+				},
+			},
+			ExpectedNumTrips: 1,
+		},
+		{
+			FirstStopTime: &gtfsrt.TripUpdate_StopTimeUpdate{
+				Arrival: &gtfsrt.TripUpdate_StopTimeEvent{
+					Time: &beforeFeedTime,
+				},
+			},
+			ExpectedNumTrips: 0,
+		},
+		{
+			FirstStopTime: &gtfsrt.TripUpdate_StopTimeUpdate{
+				Arrival: &gtfsrt.TripUpdate_StopTimeEvent{
+					Time: &afterFeedTime,
+				},
+			},
+			ExpectedNumTrips: 1,
+		},
+		{
+			FirstStopTime:    &gtfsrt.TripUpdate_StopTimeUpdate{},
+			ExpectedNumTrips: 0,
+		},
+	}
+	for i, tc := range testCases {
+		t.Run(fmt.Sprintf("case_%d", i), func(t *testing.T) {
+			message := gtfsrt.FeedMessage{
+				Header: &gtfsrt.FeedHeader{
+					GtfsRealtimeVersion: ptr("2.0"),
+					Timestamp:           &feedTime,
+				},
+				Entity: []*gtfsrt.FeedEntity{
+					{
+						Id: ptr("1"),
+						TripUpdate: &gtfsrt.TripUpdate{
+							Trip:           &gtfsrt.TripDescriptor{},
+							StopTimeUpdate: []*gtfsrt.TripUpdate_StopTimeUpdate{tc.FirstStopTime},
+						},
+					},
+				},
+			}
+			b, err := proto.Marshal(&message)
+			if err != nil {
+				t.Fatalf("Failed to marshal message: %s", err)
+			}
+
+			result, err := gtfs.ParseRealtime(b, &gtfs.ParseRealtimeOptions{
+				UseNyctExtension:               true,
+				NyctFilterStaleUnassignedTrips: true,
+			})
+			if err != nil {
+				t.Errorf("unexpected error in ParseRealtime: %s", err)
+			}
+			if len(result.Trips) != tc.ExpectedNumTrips {
+				t.Errorf("len(result.Trips)=%d, wanted %d", len(result.Trips), tc.ExpectedNumTrips)
+			}
+		})
+	}
+}
+
 func ptr(s string) *string {
 	return &s
 }

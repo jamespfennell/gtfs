@@ -738,7 +738,7 @@ func parseTransfers(csv *csv.File, opts TransfersOptions, stops []Stop) ([]Trans
 			continue
 		}
 		if fromStop.Id == toStop.Id {
-			log.Printf("Skipping transfer between the same stop %q", fromStop.Id)
+			// log.Printf("Skipping transfer between the same stop %q", fromStop.Id)
 			continue
 		}
 		switch opts.FindStrategy(fromStop.Id, toStop.Id) {

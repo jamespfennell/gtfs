@@ -57,7 +57,7 @@ func TestSoloTrip(t *testing.T) {
 	trip.Vehicle = &vehicle
 	vehicle.Trip = &trip
 	expectedResult := &Realtime{
-		CreatedAt: &time1,
+		CreatedAt: time1,
 		Trips:     []Trip{trip},
 		Vehicles:  []Vehicle{vehicle},
 	}
