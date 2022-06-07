@@ -36,6 +36,8 @@ type Realtime struct {
 	Trips []Trip
 
 	Vehicles []Vehicle
+
+	Alerts []Alert
 }
 
 type Trip struct {
@@ -123,6 +125,117 @@ func (vehicle *Vehicle) GetTrip() Trip {
 	return Trip{}
 }
 
+type Alert struct {
+	ID               string
+	Cause            AlertCause
+	Effect           AlertEffect
+	ActivePeriods    []AlertActivePeriod
+	AffectedEntities []AlertAffectedEntity
+	Messages         []AlertMessage
+}
+
+type AlertCause int32
+
+const (
+	UnknownCause     AlertCause = 0
+	OtherCause       AlertCause = 1
+	TechnicalProblem AlertCause = 2
+	Strike           AlertCause = 3
+	Demonstration    AlertCause = 4
+	Accident         AlertCause = 5
+	Holiday          AlertCause = 6
+	Weather          AlertCause = 7
+	Maintenance      AlertCause = 8
+	Construction     AlertCause = 9
+	PoliceActivity   AlertCause = 10
+	MedicalEmergency AlertCause = 11
+)
+
+func (c AlertCause) String() string {
+	switch c {
+	case OtherCause:
+		return "OTHER_CAUSE"
+	case TechnicalProblem:
+		return "TECHNICAL_PROBLEM"
+	case Strike:
+		return "STRIKE"
+	case Demonstration:
+		return "DEMONSTRATION"
+	case Accident:
+		return "ACCIDENT"
+	case Holiday:
+		return "HOLIDAY"
+	case Weather:
+		return "WEATHER"
+	case Maintenance:
+		return "MAINTENANCE"
+	case Construction:
+		return "CONSTRUCTION"
+	case PoliceActivity:
+		return "POLICE_ACTIVITY"
+	case MedicalEmergency:
+		return "MEDICAL_EMERGENCY"
+	}
+	return "UNKNOWN_CAUSE"
+}
+
+type AlertEffect int32
+
+const (
+	UnknownEffect     AlertEffect = 0
+	NoService         AlertEffect = 1
+	ReducedService    AlertEffect = 2
+	SignificantDelays AlertEffect = 3
+	Detour            AlertEffect = 4
+	AdditionalService AlertEffect = 5
+	ModifiedService   AlertEffect = 6
+	OtherEffect       AlertEffect = 7
+	StopMoved         AlertEffect = 9
+)
+
+func (e AlertEffect) String() string {
+	switch e {
+	case NoService:
+		return "NO_SERVICE"
+	case ReducedService:
+		return "REDUCED_SERVICE"
+	case SignificantDelays:
+		return "SIGNIFICANT_DELAYS"
+	case Detour:
+		return "DETOUR"
+	case AdditionalService:
+		return "ADDITIONAL_SERVICE"
+	case ModifiedService:
+		return "MODIFIED_SERVICE"
+	case OtherEffect:
+		return "OTHER_EFFECT"
+	case StopMoved:
+		return "STOP_MOVED"
+	}
+	return "UNKNOWN_EFFECT"
+}
+
+type AlertActivePeriod struct {
+	StartsAt time.Time
+	EndsAt   time.Time
+}
+
+type AlertAffectedEntity struct {
+	AgencyID    string
+	RouteID     string
+	RouteType   RouteType
+	DirectionID DirectionID
+	TripID      TripID
+	StopID      string
+}
+
+type AlertMessage struct {
+	Header      string
+	Description string
+	URL         string
+	Language    string
+}
+
 type ParseRealtimeOptions struct {
 	// The timezone to interpret date field.
 	//
@@ -170,7 +283,7 @@ func ParseRealtime(content []byte, opts *ParseRealtimeOptions) (*Realtime, error
 		} else if vehiclePosition := entity.Vehicle; vehicle != nil {
 			trip, vehicle, ok = parseVehicle(vehiclePosition, opts)
 		} else if alert := entity.Alert; alert != nil {
-			// TODO: parse alerts
+			result.Alerts = append(result.Alerts, parseAlert(entity.GetId(), alert))
 			continue
 		} else {
 			continue
@@ -380,4 +493,77 @@ func convertDirectionID(raw *uint32) DirectionID {
 		return DirectionIDFalse
 	}
 	return DirectionIDTrue
+}
+
+func parseAlert(ID string, alert *gtfsrt.Alert) Alert {
+	cause := UnknownCause
+	switch alert.GetCause() {
+	case gtfsrt.Alert_OTHER_CAUSE:
+		cause = OtherCause
+	case gtfsrt.Alert_TECHNICAL_PROBLEM:
+		cause = TechnicalProblem
+	case gtfsrt.Alert_STRIKE:
+		cause = Strike
+	case gtfsrt.Alert_DEMONSTRATION:
+		cause = Demonstration
+	case gtfsrt.Alert_ACCIDENT:
+		cause = Accident
+	case gtfsrt.Alert_HOLIDAY:
+		cause = Holiday
+	case gtfsrt.Alert_WEATHER:
+		cause = Weather
+	case gtfsrt.Alert_MAINTENANCE:
+		cause = Maintenance
+	case gtfsrt.Alert_CONSTRUCTION:
+		cause = Construction
+	case gtfsrt.Alert_POLICE_ACTIVITY:
+		cause = PoliceActivity
+	case gtfsrt.Alert_MEDICAL_EMERGENCY:
+		cause = MedicalEmergency
+	}
+
+	effect := UnknownEffect
+	switch alert.GetEffect() {
+	case gtfsrt.Alert_NO_SERVICE:
+		effect = NoService
+	case gtfsrt.Alert_REDUCED_SERVICE:
+		effect = ReducedService
+	case gtfsrt.Alert_SIGNIFICANT_DELAYS:
+		effect = SignificantDelays
+	case gtfsrt.Alert_DETOUR:
+		effect = Detour
+	case gtfsrt.Alert_ADDITIONAL_SERVICE:
+		effect = AdditionalService
+	case gtfsrt.Alert_MODIFIED_SERVICE:
+		effect = ModifiedService
+	case gtfsrt.Alert_OTHER_EFFECT:
+		effect = OtherEffect
+	case gtfsrt.Alert_STOP_MOVED:
+		effect = StopMoved
+	}
+
+	languageToMessage := map[string]*AlertMessage{}
+	populateMessages(languageToMessage, alert.GetHeaderText(), func(am *AlertMessage) *string { return &am.Header })
+	populateMessages(languageToMessage, alert.GetDescriptionText(), func(am *AlertMessage) *string { return &am.Description })
+	populateMessages(languageToMessage, alert.GetUrl(), func(am *AlertMessage) *string { return &am.URL })
+	var messages []AlertMessage
+	for _, message := range languageToMessage {
+		messages = append(messages, *message)
+	}
+
+	return Alert{
+		ID:       ID,
+		Cause:    cause,
+		Effect:   effect,
+		Messages: messages,
+	}
+}
+
+func populateMessages(languageToMessage map[string]*AlertMessage, ts *gtfsrt.TranslatedString, getter func(*AlertMessage) *string) {
+	for _, s := range ts.GetTranslation() {
+		if _, ok := languageToMessage[s.GetLanguage()]; !ok {
+			languageToMessage[s.GetLanguage()] = &AlertMessage{}
+		}
+		*getter(languageToMessage[s.GetLanguage()]) = s.GetText()
+	}
 }

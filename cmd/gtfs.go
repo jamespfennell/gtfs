@@ -79,6 +79,10 @@ func main() {
 					for _, trip := range realtime.Trips {
 						fmt.Printf("- %s\n", formatTrip(trip, 2, ctx.Bool("verbose")))
 					}
+					fmt.Printf("%d alerts:\n", len(realtime.Alerts))
+					for _, alert := range realtime.Alerts {
+						fmt.Printf("- %s\n", formatAlert(alert, 2))
+					}
 					return nil
 				},
 			},
@@ -128,6 +132,32 @@ func formatTrip(trip gtfs.Trip, indent int, printStopTimes bool) string {
 		fmt.Fprintf(&b, "Num stop times: %d (show with -v)%s", len(trip.StopTimeUpdates), newLine)
 	}
 
+	return b.String()
+}
+
+func formatAlert(alert gtfs.Alert, indent int) string {
+	var header string
+	for _, message := range alert.Messages {
+		if header == "" || len(message.Header) < len(header) {
+			header = message.Header
+		}
+	}
+	if len(header) > 60 {
+		header = header[:60] + "..."
+	}
+	var b strings.Builder
+	tc := color.New(color.FgCyan)
+	vc := color.New(color.FgMagenta)
+	// sc := color.New(color.FgGreen)
+	newLine := fmt.Sprintf("\n%*s", indent, "")
+	fmt.Fprintf(&b,
+		"AlertID %s  Cause %s  Effect %s  Header %s%s",
+		tc.Sprint(alert.ID),
+		tc.Sprint(alert.Cause),
+		tc.Sprint(alert.Effect),
+		vc.Sprint(header),
+		newLine,
+	)
 	return b.String()
 }
 
