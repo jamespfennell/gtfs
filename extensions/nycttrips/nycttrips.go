@@ -1,5 +1,5 @@
-// Package nyct contains logic for the New York City Transit GTFS realtime extenstions
-package nyct
+// Package nycttrips contains logic for the New York City Transit GTFS realtime extenstions
+package nycttrips
 
 import (
 	"fmt"

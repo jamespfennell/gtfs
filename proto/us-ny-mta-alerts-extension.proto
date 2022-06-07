@@ -1,0 +1,91 @@
+
+// Copyright 2020 Metropolitan Transportation Authority
+//
+// Mercury extensions for the GTFS-realtime protocol.
+//
+syntax = "proto2";
+
+import "proto/gtfs-realtime.proto";
+
+option java_package = "com.google.transit.realtime";
+package transit_realtime;
+option go_package = "github.com/jamespfennell/gtfs/proto";
+
+// Mercury extensions for the Feed Header
+message MercuryFeedHeader {
+  // Version of the Mercury extensions
+  // The current version is 1.0
+  required string mercury_version = 1;
+}
+
+// The MTA unfortunately reusued the 1001 extention number for this alerts extension. So the alerts
+// proto file and trips proto file cannot be compiled together. To get around this we just comment
+// out this extention.
+//
+// extend FeedHeader {
+// optional MercuryFeedHeader mercury_feed_header = 1001;
+// }
+
+// Mercury extensions for the Feed Alert
+message MercuryAlert {
+  required uint64 created_at = 1;
+  required uint64 updated_at = 2;
+  required string alert_type = 3;
+}
+
+extend Alert {
+ optional MercuryAlert mercury_alert = 1001;
+}
+
+// Mercury extensions for the Feed Entity Selector
+message MercuryEntitySelector {
+
+  // What is the priority of the affected entity. Use to construct the entity sort_order.
+  // Note: Nyct Bus uses a different priority ordering
+
+  enum Priority {
+    PRIORITY_NO_SCHEDULED_SERVICE = 1;
+    PRIORITY_SUNDAY_SCHEDULE = 2;
+    PRIORITY_SATURDAY_SCHEDULE = 3;
+    PRIORITY_HOLIDAY_SERVICE = 4;
+    PRIORITY_EXTRA_SERVICE = 5;
+    PRIORITY_PLANNED_WORK = 6;
+    PRIORITY_ON_OR_CLOSE = 7;
+    PRIORITY_SLOW_SPEEDS = 8;
+    PRIORITY_SOME_DELAYS = 9;
+    PRIORITY_SPECIAL_EVENT = 10;
+    PRIORITY_STATIONS_SKIPPED = 11;
+    PRIORITY_DELAYS = 12;
+    PRIORITY_EXPRESS_TO_LOCAL = 13;
+    PRIORITY_SOME_REROUTES = 14;
+    PRIORITY_LOCAL_TO_EXPRESS = 15;
+    PRIORITY_SERVICE_CHANGE = 16;
+    PRIORITY_TRAINS_REROUTED = 17;
+    PRIORITY_PART_SUSPENDED = 18;
+    PRIORITY_MULTIPLE_IMPACTS = 19;
+    PRIORITY_SUSPENDED = 20;
+    PRIORITY_BUSING = 21;
+  }
+
+  enum NyctBusPriority {
+    NYCT_BUS_PRIORITY_NO_SCHEDULED_SERVICE = 1;
+    NYCT_BUS_PRIORITY_SUNDAY_SCHEDULE = 2;
+    NYCT_BUS_PRIORITY_SATURDAY_SCHEDULE = 3;
+    NYCT_BUS_PRIORITY_HOLIDAY_SERVICE = 4;
+    NYCT_BUS_PRIORITY_PLANNED_DETOUR = 5;
+    NYCT_BUS_PRIORITY_EXTRA_SERVICE = 6;
+    NYCT_BUS_PRIORITY_PLANNED_WORK = 7;
+    NYCT_BUS_PRIORITY_SPECIAL_EVENT = 11;
+    NYCT_BUS_PRIORITY_DELAYS = 13;
+    NYCT_BUS_PRIORITY_DETOURS = 16;
+    NYCT_BUS_PRIORITY_SERVICE_CHANGE = 18;
+    NYCT_BUS_PRIORITY_SUSPENDED = 22;
+  }
+
+  // Format for sort_order is 'GTFS-ID:Priority', e.g. 'MTASBWY:G:16'
+  required string sort_order = 1;
+}
+
+extend EntitySelector {
+ optional MercuryEntitySelector mercury_entity_selector = 1001;
+}

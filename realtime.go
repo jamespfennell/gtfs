@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/jamespfennell/gtfs/nyct"
+	"github.com/jamespfennell/gtfs/extensions/nycttrips"
 	gtfsrt "github.com/jamespfennell/gtfs/proto"
 	"google.golang.org/protobuf/proto"
 )
@@ -246,7 +246,7 @@ type ParseRealtimeOptions struct {
 	UseNyctExtension bool
 
 	// If true, trips that are unassigned and should be running will be skipped.
-	// This addresses a data bug in the NYCT feeds.
+	// This addresses a data bug in the NYCT trips feeds.
 	NyctFilterStaleUnassignedTrips bool
 }
 
@@ -343,8 +343,8 @@ func parseTripUpdate(tripUpdate *gtfsrt.TripUpdate, opts *ParseRealtimeOptions, 
 	}
 	var nyctIsAssigned bool
 	if opts.UseNyctExtension {
-		nyctIsAssigned = nyct.UpdateDescriptors(tripUpdate)
-		if opts.NyctFilterStaleUnassignedTrips && nyct.IsStaleUnassignedTrip(nyctIsAssigned, tripUpdate.StopTimeUpdate, feedCreatedAt) {
+		nyctIsAssigned = nycttrips.UpdateDescriptors(tripUpdate)
+		if opts.NyctFilterStaleUnassignedTrips && nycttrips.IsStaleUnassignedTrip(nyctIsAssigned, tripUpdate.StopTimeUpdate, feedCreatedAt) {
 			return nil, nil, false
 		}
 	}
@@ -373,7 +373,7 @@ func parseTripUpdate(tripUpdate *gtfsrt.TripUpdate, opts *ParseRealtimeOptions, 
 	for _, stopTimeUpdate := range tripUpdate.StopTimeUpdate {
 		var nyctTrack *string
 		if opts.UseNyctExtension {
-			nyctTrack = nyct.GetTrack(stopTimeUpdate)
+			nyctTrack = nycttrips.GetTrack(stopTimeUpdate)
 		}
 		trip.StopTimeUpdates = append(trip.StopTimeUpdates, StopTimeUpdate{
 			StopSequence: stopTimeUpdate.StopSequence,
@@ -395,7 +395,7 @@ func parseTripUpdate(tripUpdate *gtfsrt.TripUpdate, opts *ParseRealtimeOptions, 
 
 func parseVehicle(vehiclePosition *gtfsrt.VehiclePosition, opts *ParseRealtimeOptions) (*Trip, *Vehicle, bool) {
 	if opts.UseNyctExtension {
-		nyct.UpdateDescriptors(vehiclePosition)
+		nycttrips.UpdateDescriptors(vehiclePosition)
 	}
 	vehicle := &Vehicle{
 		ID:                parseVehicleDescriptor(vehiclePosition.Vehicle, opts),

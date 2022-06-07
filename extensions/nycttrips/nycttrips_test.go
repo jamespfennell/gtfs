@@ -1,4 +1,4 @@
-package nyct_test
+package nycttrips_test
 
 import (
 	"fmt"
