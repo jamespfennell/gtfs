@@ -6,22 +6,31 @@ import (
 	"regexp"
 	"strconv"
 
+	"github.com/jamespfennell/gtfs/extensions"
 	gtfsrt "github.com/jamespfennell/gtfs/proto"
 	"google.golang.org/protobuf/proto"
 )
 
 var TripIDRegex *regexp.Regexp = regexp.MustCompile(`^([0-9]{6})_([[:alnum:]]{1,2})..([SN])([[:alnum:]]*)$`)
 
-type HasTripDescriptor interface {
-	GetTrip() *gtfsrt.TripDescriptor
+// Extension returns the NYCT trips extension
+func Extension(filterStaleUnassignedTrips bool) extensions.Extension {
+	return extension{
+		filterStaleUnassignedTrips: filterStaleUnassignedTrips,
+	}
 }
 
-// UpdateDescriptors populates fields in the GTFS trip and vehicle descriptors
+type extension struct {
+	filterStaleUnassignedTrips bool
+}
+
+// UpdateTripOrVehicle populates fields in the GTFS trip and vehicle descriptors
 // using data in the NYCT trip descriptors extension.
-func UpdateDescriptors(entity HasTripDescriptor) bool {
+func (e extension) UpdateTripOrVehicle(entity extensions.TripOrVehicle, feedCreatedAt uint64) extensions.UpdateTripOrVehicleResult {
 	tripDesc := entity.GetTrip()
 	if !proto.HasExtension(tripDesc, gtfsrt.E_NyctTripDescriptor) {
-		return false
+		fmt.Println("NO EXTENSION")
+		return extensions.UpdateTripOrVehicleResult{}
 	}
 	extendedEvent := proto.GetExtension(tripDesc, gtfsrt.E_NyctTripDescriptor)
 	nyctTripDesc, _ := extendedEvent.(*gtfsrt.NyctTripDescriptor)
@@ -53,10 +62,17 @@ func UpdateDescriptors(entity HasTripDescriptor) bool {
 		tripDesc.StartTime = &startTime
 	}
 
-	return nyctTripDesc.GetIsAssigned()
+	shouldSkip := false
+	if tripUpdate, ok := entity.(*gtfsrt.TripUpdate); ok && e.filterStaleUnassignedTrips {
+		shouldSkip = isStaleUnassignedTrip(nyctTripDesc.GetIsAssigned(), tripUpdate.StopTimeUpdate, feedCreatedAt)
+	}
+	return extensions.UpdateTripOrVehicleResult{
+		ShouldSkip:     shouldSkip,
+		NyctIsAssigned: nyctTripDesc.GetIsAssigned(),
+	}
 }
 
-func setVehicleDescriptor(entity HasTripDescriptor, vehicleDesc *gtfsrt.VehicleDescriptor) {
+func setVehicleDescriptor(entity extensions.TripOrVehicle, vehicleDesc *gtfsrt.VehicleDescriptor) {
 	switch t := entity.(type) {
 	case *gtfsrt.TripUpdate:
 		t.Vehicle = vehicleDesc
@@ -65,7 +81,7 @@ func setVehicleDescriptor(entity HasTripDescriptor, vehicleDesc *gtfsrt.VehicleD
 	}
 }
 
-func IsStaleUnassignedTrip(isAssigned bool, stopTimes []*gtfsrt.TripUpdate_StopTimeUpdate, feedCreatedAt uint64) bool {
+func isStaleUnassignedTrip(isAssigned bool, stopTimes []*gtfsrt.TripUpdate_StopTimeUpdate, feedCreatedAt uint64) bool {
 	if isAssigned {
 		return false
 	}
@@ -83,7 +99,7 @@ func IsStaleUnassignedTrip(isAssigned bool, stopTimes []*gtfsrt.TripUpdate_StopT
 	return firstTime < int64(feedCreatedAt)
 }
 
-func GetTrack(stopTimeUpdate *gtfsrt.TripUpdate_StopTimeUpdate) *string {
+func (e extension) GetTrack(stopTimeUpdate *gtfsrt.TripUpdate_StopTimeUpdate) *string {
 	if !proto.HasExtension(stopTimeUpdate, gtfsrt.E_NyctStopTimeUpdate) {
 		return nil
 	}

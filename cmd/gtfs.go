@@ -8,6 +8,7 @@ import (
 
 	"github.com/fatih/color"
 	"github.com/jamespfennell/gtfs"
+	"github.com/jamespfennell/gtfs/extensions/nycttrips"
 	"github.com/urfave/cli/v2"
 )
 
@@ -64,7 +65,7 @@ func main() {
 
 					opts := gtfs.ParseRealtimeOptions{}
 					if ctx.Bool("nyct") {
-						opts.UseNyctExtension = true
+						opts.Extension = nycttrips.Extension(true)
 						americaNewYorkTimezone, err := time.LoadLocation("America/New_York")
 						if err == nil {
 							opts.Timezone = americaNewYorkTimezone

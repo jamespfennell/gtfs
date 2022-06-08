@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/jamespfennell/gtfs/extensions/nycttrips"
+	"github.com/jamespfennell/gtfs/extensions"
 	gtfsrt "github.com/jamespfennell/gtfs/proto"
 	"google.golang.org/protobuf/proto"
 )
@@ -242,12 +242,10 @@ type ParseRealtimeOptions struct {
 	// It can be nil, in which case UTC will used.
 	Timezone *time.Location
 
-	// Whether to use the New York City Transit extensions.
-	UseNyctExtension bool
-
-	// If true, trips that are unassigned and should be running will be skipped.
-	// This addresses a data bug in the NYCT trips feeds.
-	NyctFilterStaleUnassignedTrips bool
+	// The GTFS Realtime extension to use when parsing.
+	//
+	// This can be nil, in which case no extension is used.
+	Extension extensions.Extension
 }
 
 func (opts *ParseRealtimeOptions) timezoneOrUTC() *time.Location {
@@ -258,6 +256,9 @@ func (opts *ParseRealtimeOptions) timezoneOrUTC() *time.Location {
 }
 
 func ParseRealtime(content []byte, opts *ParseRealtimeOptions) (*Realtime, error) {
+	if opts.Extension == nil {
+		opts.Extension = extensions.NoExtension()
+	}
 	feedMessage := &gtfsrt.FeedMessage{}
 	if err := proto.Unmarshal(content, feedMessage); err != nil {
 		return nil, fmt.Errorf("failed to parse input as a GTFS Realtime message: %s", err)
@@ -281,7 +282,7 @@ func ParseRealtime(content []byte, opts *ParseRealtimeOptions) (*Realtime, error
 		if tripUpdate := entity.TripUpdate; tripUpdate != nil {
 			trip, vehicle, ok = parseTripUpdate(tripUpdate, opts, feedMessage.GetHeader().GetTimestamp())
 		} else if vehiclePosition := entity.Vehicle; vehicle != nil {
-			trip, vehicle, ok = parseVehicle(vehiclePosition, opts)
+			trip, vehicle, ok = parseVehicle(vehiclePosition, opts, feedMessage.GetHeader().GetTimestamp())
 		} else if alert := entity.Alert; alert != nil {
 			result.Alerts = append(result.Alerts, parseAlert(entity.GetId(), alert))
 			continue
@@ -341,16 +342,13 @@ func parseTripUpdate(tripUpdate *gtfsrt.TripUpdate, opts *ParseRealtimeOptions, 
 	if tripUpdate.Trip == nil {
 		return nil, nil, false
 	}
-	var nyctIsAssigned bool
-	if opts.UseNyctExtension {
-		nyctIsAssigned = nycttrips.UpdateDescriptors(tripUpdate)
-		if opts.NyctFilterStaleUnassignedTrips && nycttrips.IsStaleUnassignedTrip(nyctIsAssigned, tripUpdate.StopTimeUpdate, feedCreatedAt) {
-			return nil, nil, false
-		}
+	updateTripOrVehicleResult := opts.Extension.UpdateTripOrVehicle(tripUpdate, feedCreatedAt)
+	if updateTripOrVehicleResult.ShouldSkip {
+		return nil, nil, false
 	}
 	trip := &Trip{
 		ID:                parseTripDescriptor(tripUpdate.Trip, opts),
-		NyctIsAssigned:    nyctIsAssigned,
+		NyctIsAssigned:    updateTripOrVehicleResult.NyctIsAssigned,
 		IsEntityInMessage: true,
 	}
 	convertStopTimeEvent := func(stopTimeEvent *gtfsrt.TripUpdate_StopTimeEvent) *StopTimeEvent {
@@ -371,16 +369,12 @@ func parseTripUpdate(tripUpdate *gtfsrt.TripUpdate, opts *ParseRealtimeOptions, 
 		return &result
 	}
 	for _, stopTimeUpdate := range tripUpdate.StopTimeUpdate {
-		var nyctTrack *string
-		if opts.UseNyctExtension {
-			nyctTrack = nycttrips.GetTrack(stopTimeUpdate)
-		}
 		trip.StopTimeUpdates = append(trip.StopTimeUpdates, StopTimeUpdate{
 			StopSequence: stopTimeUpdate.StopSequence,
 			StopID:       stopTimeUpdate.StopId,
 			Arrival:      convertStopTimeEvent(stopTimeUpdate.Arrival),
 			Departure:    convertStopTimeEvent(stopTimeUpdate.Departure),
-			NyctTrack:    nyctTrack,
+			NyctTrack:    opts.Extension.GetTrack(stopTimeUpdate),
 		})
 	}
 	if tripUpdate.Vehicle == nil {
@@ -393,9 +387,9 @@ func parseTripUpdate(tripUpdate *gtfsrt.TripUpdate, opts *ParseRealtimeOptions, 
 	return trip, vehicle, true
 }
 
-func parseVehicle(vehiclePosition *gtfsrt.VehiclePosition, opts *ParseRealtimeOptions) (*Trip, *Vehicle, bool) {
-	if opts.UseNyctExtension {
-		nycttrips.UpdateDescriptors(vehiclePosition)
+func parseVehicle(vehiclePosition *gtfsrt.VehiclePosition, opts *ParseRealtimeOptions, feedCreatedAt uint64) (*Trip, *Vehicle, bool) {
+	if opts.Extension.UpdateTripOrVehicle(vehiclePosition, feedCreatedAt).ShouldSkip {
+		return nil, nil, false
 	}
 	vehicle := &Vehicle{
 		ID:                parseVehicleDescriptor(vehiclePosition.Vehicle, opts),
