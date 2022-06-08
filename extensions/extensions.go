@@ -9,11 +9,13 @@ type Extension interface {
 
 	UpdateVehicle(vehicle *gtfsrt.VehiclePosition)
 
+	UpdateAlert(alert *gtfsrt.Alert)
+
 	GetTrack(stopTimeUpdate *gtfsrt.TripUpdate_StopTimeUpdate) *string
 }
 
 type UpdateTripResult struct {
-	// Whether this entitity should be skipped.
+	// Whether this trip should be skipped.
 	ShouldSkip bool
 
 	// Value of the NyctIsAssigned field if the entity is a trip. This field is ignored for vehicles.
@@ -32,6 +34,9 @@ func (n NoExtensionImpl) UpdateTrip(trip *gtfsrt.TripUpdate, feedCreatedAt uint6
 }
 
 func (n NoExtensionImpl) UpdateVehicle(vehicle *gtfsrt.VehiclePosition) {
+}
+
+func (n NoExtensionImpl) UpdateAlert(alert *gtfsrt.Alert) {
 }
 
 func (n NoExtensionImpl) GetTrack(stopTimeUpdate *gtfsrt.TripUpdate_StopTimeUpdate) *string {

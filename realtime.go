@@ -284,7 +284,7 @@ func ParseRealtime(content []byte, opts *ParseRealtimeOptions) (*Realtime, error
 		} else if vehiclePosition := entity.Vehicle; vehicle != nil {
 			trip, vehicle, ok = parseVehicle(vehiclePosition, opts, feedMessage.GetHeader().GetTimestamp())
 		} else if alert := entity.Alert; alert != nil {
-			result.Alerts = append(result.Alerts, parseAlert(entity.GetId(), alert))
+			result.Alerts = append(result.Alerts, parseAlert(entity.GetId(), alert, opts))
 			continue
 		} else {
 			continue
@@ -487,7 +487,8 @@ func convertDirectionID(raw *uint32) DirectionID {
 	return DirectionIDTrue
 }
 
-func parseAlert(ID string, alert *gtfsrt.Alert) Alert {
+func parseAlert(ID string, alert *gtfsrt.Alert, opts *ParseRealtimeOptions) Alert {
+	opts.Extension.UpdateAlert(alert)
 	cause := UnknownCause
 	switch alert.GetCause() {
 	case gtfsrt.Alert_OTHER_CAUSE:

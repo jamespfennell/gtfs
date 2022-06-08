@@ -22,6 +22,8 @@ func Extension(filterStaleUnassignedTrips bool) extensions.Extension {
 
 type extension struct {
 	filterStaleUnassignedTrips bool
+
+	extensions.NoExtensionImpl
 }
 
 func (e extension) UpdateTrip(trip *gtfsrt.TripUpdate, feedCreatedAt uint64) extensions.UpdateTripResult {
