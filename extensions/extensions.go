@@ -5,24 +5,19 @@ import (
 )
 
 type Extension interface {
-	UpdateTripOrVehicle(entity TripOrVehicle, feedCreatedAt uint64) UpdateTripOrVehicleResult
+	UpdateTrip(trip *gtfsrt.TripUpdate, feedCreatedAt uint64) UpdateTripResult
+
+	UpdateVehicle(vehicle *gtfsrt.VehiclePosition)
 
 	GetTrack(stopTimeUpdate *gtfsrt.TripUpdate_StopTimeUpdate) *string
 }
 
-type UpdateTripOrVehicleResult struct {
+type UpdateTripResult struct {
 	// Whether this entitity should be skipped.
 	ShouldSkip bool
 
 	// Value of the NyctIsAssigned field if the entity is a trip. This field is ignored for vehicles.
 	NyctIsAssigned bool
-}
-
-// TripOrVehicle is either a TripUpdate or VehiclePosition proto message.
-//
-// The original type can be extracted using a type switch.
-type TripOrVehicle interface {
-	GetTrip() *gtfsrt.TripDescriptor
 }
 
 func NoExtension() Extension {
@@ -32,8 +27,11 @@ func NoExtension() Extension {
 type NoExtensionImpl struct {
 }
 
-func (n NoExtensionImpl) UpdateTripOrVehicle(entity TripOrVehicle, feedCreatedAt uint64) UpdateTripOrVehicleResult {
-	return UpdateTripOrVehicleResult{}
+func (n NoExtensionImpl) UpdateTrip(trip *gtfsrt.TripUpdate, feedCreatedAt uint64) UpdateTripResult {
+	return UpdateTripResult{}
+}
+
+func (n NoExtensionImpl) UpdateVehicle(vehicle *gtfsrt.VehiclePosition) {
 }
 
 func (n NoExtensionImpl) GetTrack(stopTimeUpdate *gtfsrt.TripUpdate_StopTimeUpdate) *string {

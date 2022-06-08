@@ -342,13 +342,13 @@ func parseTripUpdate(tripUpdate *gtfsrt.TripUpdate, opts *ParseRealtimeOptions, 
 	if tripUpdate.Trip == nil {
 		return nil, nil, false
 	}
-	updateTripOrVehicleResult := opts.Extension.UpdateTripOrVehicle(tripUpdate, feedCreatedAt)
-	if updateTripOrVehicleResult.ShouldSkip {
+	updateTripResult := opts.Extension.UpdateTrip(tripUpdate, feedCreatedAt)
+	if updateTripResult.ShouldSkip {
 		return nil, nil, false
 	}
 	trip := &Trip{
 		ID:                parseTripDescriptor(tripUpdate.Trip, opts),
-		NyctIsAssigned:    updateTripOrVehicleResult.NyctIsAssigned,
+		NyctIsAssigned:    updateTripResult.NyctIsAssigned,
 		IsEntityInMessage: true,
 	}
 	convertStopTimeEvent := func(stopTimeEvent *gtfsrt.TripUpdate_StopTimeEvent) *StopTimeEvent {
@@ -388,9 +388,7 @@ func parseTripUpdate(tripUpdate *gtfsrt.TripUpdate, opts *ParseRealtimeOptions, 
 }
 
 func parseVehicle(vehiclePosition *gtfsrt.VehiclePosition, opts *ParseRealtimeOptions, feedCreatedAt uint64) (*Trip, *Vehicle, bool) {
-	if opts.Extension.UpdateTripOrVehicle(vehiclePosition, feedCreatedAt).ShouldSkip {
-		return nil, nil, false
-	}
+	opts.Extension.UpdateVehicle(vehiclePosition)
 	vehicle := &Vehicle{
 		ID:                parseVehicleDescriptor(vehiclePosition.Vehicle, opts),
 		IsEntityInMessage: true,

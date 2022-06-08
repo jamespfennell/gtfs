@@ -24,13 +24,28 @@ type extension struct {
 	filterStaleUnassignedTrips bool
 }
 
-// UpdateTripOrVehicle populates fields in the GTFS trip and vehicle descriptors
-// using data in the NYCT trip descriptors extension.
-func (e extension) UpdateTripOrVehicle(entity extensions.TripOrVehicle, feedCreatedAt uint64) extensions.UpdateTripOrVehicleResult {
+func (e extension) UpdateTrip(trip *gtfsrt.TripUpdate, feedCreatedAt uint64) extensions.UpdateTripResult {
+	isAssigned := e.updateTripOrVehicle(trip)
+	shouldSkip := proto.HasExtension(trip.GetTrip(), gtfsrt.E_NyctTripDescriptor) &&
+		e.filterStaleUnassignedTrips && isStaleUnassignedTrip(isAssigned, trip.StopTimeUpdate, feedCreatedAt)
+	return extensions.UpdateTripResult{
+		ShouldSkip:     shouldSkip,
+		NyctIsAssigned: isAssigned,
+	}
+}
+
+func (e extension) UpdateVehicle(vehicle *gtfsrt.VehiclePosition) {
+	e.updateTripOrVehicle(vehicle)
+}
+
+type tripOrVehicle interface {
+	GetTrip() *gtfsrt.TripDescriptor
+}
+
+func (e extension) updateTripOrVehicle(entity tripOrVehicle) bool {
 	tripDesc := entity.GetTrip()
 	if !proto.HasExtension(tripDesc, gtfsrt.E_NyctTripDescriptor) {
-		fmt.Println("NO EXTENSION")
-		return extensions.UpdateTripOrVehicleResult{}
+		return false
 	}
 	extendedEvent := proto.GetExtension(tripDesc, gtfsrt.E_NyctTripDescriptor)
 	nyctTripDesc, _ := extendedEvent.(*gtfsrt.NyctTripDescriptor)
@@ -61,18 +76,10 @@ func (e extension) UpdateTripOrVehicle(entity extensions.TripOrVehicle, feedCrea
 		startTime := fmt.Sprintf("%02d:%02d:%02d", minutesAfterMidnight/60, minutesAfterMidnight%60, secondsAfterMidnight%60)
 		tripDesc.StartTime = &startTime
 	}
-
-	shouldSkip := false
-	if tripUpdate, ok := entity.(*gtfsrt.TripUpdate); ok && e.filterStaleUnassignedTrips {
-		shouldSkip = isStaleUnassignedTrip(nyctTripDesc.GetIsAssigned(), tripUpdate.StopTimeUpdate, feedCreatedAt)
-	}
-	return extensions.UpdateTripOrVehicleResult{
-		ShouldSkip:     shouldSkip,
-		NyctIsAssigned: nyctTripDesc.GetIsAssigned(),
-	}
+	return nyctTripDesc.GetIsAssigned()
 }
 
-func setVehicleDescriptor(entity extensions.TripOrVehicle, vehicleDesc *gtfsrt.VehicleDescriptor) {
+func setVehicleDescriptor(entity tripOrVehicle, vehicleDesc *gtfsrt.VehicleDescriptor) {
 	switch t := entity.(type) {
 	case *gtfsrt.TripUpdate:
 		t.Vehicle = vehicleDesc
