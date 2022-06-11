@@ -8,6 +8,7 @@ import (
 
 	"github.com/fatih/color"
 	"github.com/jamespfennell/gtfs"
+	"github.com/jamespfennell/gtfs/extensions/nyctalerts"
 	"github.com/jamespfennell/gtfs/extensions/nycttrips"
 	"github.com/urfave/cli/v2"
 )
@@ -46,9 +47,9 @@ func main() {
 						Aliases: []string{"v"},
 						Usage:   "print additional data about each trip and vehicle",
 					},
-					&cli.BoolFlag{
-						Name:  "nyct",
-						Usage: "use the New York City Transit GTFS realtime extension",
+					&cli.StringFlag{
+						Name:  "extension",
+						Usage: "GTFS realtime extension to use: nycttrips, nyctalerts",
 					},
 				},
 				ArgsUsage: "path",
@@ -64,8 +65,19 @@ func main() {
 					}
 
 					opts := gtfs.ParseRealtimeOptions{}
-					if ctx.Bool("nyct") {
+					switch ctx.String("extension") {
+					case "nycttrips":
 						opts.Extension = nycttrips.Extension(true)
+						americaNewYorkTimezone, err := time.LoadLocation("America/New_York")
+						if err == nil {
+							opts.Timezone = americaNewYorkTimezone
+						}
+					case "nyctalerts":
+						opts.Extension = nyctalerts.Extension(nyctalerts.ExtensionOpts{
+							DeduplicateElevatorAlerts:      true,
+							UseStationIDsForElevatorAlerts: true,
+							SkipTimetabledNoServiceAlerts:  true,
+						})
 						americaNewYorkTimezone, err := time.LoadLocation("America/New_York")
 						if err == nil {
 							opts.Timezone = americaNewYorkTimezone
@@ -143,8 +155,8 @@ func formatAlert(alert gtfs.Alert, indent int) string {
 			header = message.Header
 		}
 	}
-	if len(header) > 60 {
-		header = header[:60] + "..."
+	if len(header) > 100 {
+		header = header[:100] + "..."
 	}
 	var b strings.Builder
 	tc := color.New(color.FgCyan)

@@ -182,15 +182,17 @@ func (c AlertCause) String() string {
 type AlertEffect int32
 
 const (
-	UnknownEffect     AlertEffect = 0
-	NoService         AlertEffect = 1
-	ReducedService    AlertEffect = 2
-	SignificantDelays AlertEffect = 3
-	Detour            AlertEffect = 4
-	AdditionalService AlertEffect = 5
-	ModifiedService   AlertEffect = 6
-	OtherEffect       AlertEffect = 7
-	StopMoved         AlertEffect = 9
+	UnknownEffect      AlertEffect = 0
+	NoService          AlertEffect = 1
+	ReducedService     AlertEffect = 2
+	SignificantDelays  AlertEffect = 3
+	Detour             AlertEffect = 4
+	AdditionalService  AlertEffect = 5
+	ModifiedService    AlertEffect = 6
+	OtherEffect        AlertEffect = 7
+	StopMoved          AlertEffect = 8
+	NoEffect           AlertEffect = 9
+	AccessibilityIssue AlertEffect = 10
 )
 
 func (e AlertEffect) String() string {
@@ -211,6 +213,10 @@ func (e AlertEffect) String() string {
 		return "OTHER_EFFECT"
 	case StopMoved:
 		return "STOP_MOVED"
+	case NoEffect:
+		return "NO_EFFECT"
+	case AccessibilityIssue:
+		return "ACCESSIBILITY_ISSUE"
 	}
 	return "UNKNOWN_EFFECT"
 }
@@ -284,7 +290,11 @@ func ParseRealtime(content []byte, opts *ParseRealtimeOptions) (*Realtime, error
 		} else if vehiclePosition := entity.Vehicle; vehicle != nil {
 			trip, vehicle, ok = parseVehicle(vehiclePosition, opts, feedMessage.GetHeader().GetTimestamp())
 		} else if alert := entity.Alert; alert != nil {
-			result.Alerts = append(result.Alerts, parseAlert(entity.GetId(), alert, opts))
+			alert, shouldSkip := parseAlert(entity.GetId(), alert, opts)
+			if shouldSkip {
+				continue
+			}
+			result.Alerts = append(result.Alerts, alert)
 			continue
 		} else {
 			continue
@@ -487,8 +497,10 @@ func convertDirectionID(raw *uint32) DirectionID {
 	return DirectionIDTrue
 }
 
-func parseAlert(ID string, alert *gtfsrt.Alert, opts *ParseRealtimeOptions) Alert {
-	opts.Extension.UpdateAlert(alert)
+func parseAlert(ID string, alert *gtfsrt.Alert, opts *ParseRealtimeOptions) (Alert, bool) {
+	if shouldSkip := opts.Extension.UpdateAlert(&ID, alert); shouldSkip {
+		return Alert{}, true
+	}
 	cause := UnknownCause
 	switch alert.GetCause() {
 	case gtfsrt.Alert_OTHER_CAUSE:
@@ -533,6 +545,8 @@ func parseAlert(ID string, alert *gtfsrt.Alert, opts *ParseRealtimeOptions) Aler
 		effect = OtherEffect
 	case gtfsrt.Alert_STOP_MOVED:
 		effect = StopMoved
+	case gtfsrt.Alert_ACCESSIBILITY_ISSUE:
+		effect = AccessibilityIssue
 	}
 
 	languageToMessage := map[string]*AlertMessage{}
@@ -549,7 +563,7 @@ func parseAlert(ID string, alert *gtfsrt.Alert, opts *ParseRealtimeOptions) Aler
 		Cause:    cause,
 		Effect:   effect,
 		Messages: messages,
-	}
+	}, false
 }
 
 func populateMessages(languageToMessage map[string]*AlertMessage, ts *gtfsrt.TranslatedString, getter func(*AlertMessage) *string) {

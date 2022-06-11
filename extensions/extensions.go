@@ -9,7 +9,7 @@ type Extension interface {
 
 	UpdateVehicle(vehicle *gtfsrt.VehiclePosition)
 
-	UpdateAlert(alert *gtfsrt.Alert)
+	UpdateAlert(ID *string, alert *gtfsrt.Alert) bool
 
 	GetTrack(stopTimeUpdate *gtfsrt.TripUpdate_StopTimeUpdate) *string
 }
@@ -36,7 +36,8 @@ func (n NoExtensionImpl) UpdateTrip(trip *gtfsrt.TripUpdate, feedCreatedAt uint6
 func (n NoExtensionImpl) UpdateVehicle(vehicle *gtfsrt.VehiclePosition) {
 }
 
-func (n NoExtensionImpl) UpdateAlert(alert *gtfsrt.Alert) {
+func (n NoExtensionImpl) UpdateAlert(ID *string, alert *gtfsrt.Alert) bool {
+	return false
 }
 
 func (n NoExtensionImpl) GetTrack(stopTimeUpdate *gtfsrt.TripUpdate_StopTimeUpdate) *string {
