@@ -130,7 +130,7 @@ type Alert struct {
 	Cause            AlertCause
 	Effect           AlertEffect
 	ActivePeriods    []AlertActivePeriod
-	AffectedEntities []AlertAffectedEntity
+	InformedEntities []AlertInformedEntity
 	Messages         []AlertMessage
 }
 
@@ -179,6 +179,7 @@ func (c AlertCause) String() string {
 	return "UNKNOWN_CAUSE"
 }
 
+// TODO: just use a type alias to the Gtfs rt type?
 type AlertEffect int32
 
 const (
@@ -226,13 +227,13 @@ type AlertActivePeriod struct {
 	EndsAt   time.Time
 }
 
-type AlertAffectedEntity struct {
-	AgencyID    string
-	RouteID     string
-	RouteType   RouteType
-	DirectionID DirectionID
-	TripID      TripID
-	StopID      string
+type AlertInformedEntity struct {
+	AgencyID    *string
+	RouteID     *string
+	RouteType   *RouteType
+	DirectionID *DirectionID
+	TripID      *TripID
+	StopID      *string
 }
 
 type AlertMessage struct {
@@ -558,11 +559,25 @@ func parseAlert(ID string, alert *gtfsrt.Alert, opts *ParseRealtimeOptions) (Ale
 		messages = append(messages, *message)
 	}
 
+	var informedEntites []AlertInformedEntity
+	for _, entity := range alert.GetInformedEntity() {
+		informedEntites = append(informedEntites, AlertInformedEntity{
+			AgencyID: entity.AgencyId,
+			RouteID:  entity.RouteId,
+			// TODO
+			//RouteType    *RouteType
+			//DirectionID *DirectionID
+			//TripID      *TripID
+			StopID: entity.StopId,
+		})
+	}
+
 	return Alert{
-		ID:       ID,
-		Cause:    cause,
-		Effect:   effect,
-		Messages: messages,
+		ID:               ID,
+		Cause:            cause,
+		Effect:           effect,
+		Messages:         messages,
+		InformedEntities: informedEntites,
 	}, false
 }
 

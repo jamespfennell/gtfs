@@ -5,6 +5,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/jamespfennell/gtfs/extensions"
 	gtfsrt "github.com/jamespfennell/gtfs/proto"
@@ -46,10 +47,19 @@ func Extension(opts ExtensionOpts) extensions.Extension {
 	}
 }
 
+// Metadata contains some NYCT-specific information on the alert that cannot be mapped to standard GTFS
+// realtime alerts feeds.
 type Metadata struct {
-	CreatedAt  *uint64
-	UpdatedAt  *uint64
-	SortOrders []string
+	CreatedAt                 time.Time
+	UpdatedAt                 time.Time
+	DisplayBeforeActive       time.Duration
+	HumanReadableActivePeriod string
+	AffectedEntitiesMetadata  []AffectedEntityMetadata
+}
+
+type AffectedEntityMetadata struct {
+	SortOrder string
+	Priority  gtfsrt.MercuryEntitySelector_Priority
 }
 
 type extension struct {
@@ -119,7 +129,7 @@ func (e extension) UpdateAlert(ID *string, alert *gtfsrt.Alert) bool {
 		cause = gtfsrt.Alert_MAINTENANCE
 	} else if strings.HasPrefix(*ID, "lmm:alert") {
 		cause = gtfsrt.Alert_TECHNICAL_PROBLEM
-		// TODO: search for Police/NYPD?
+		// TODO: search for Police,NYPD,Medical,etc and use different causes?
 	}
 	alert.Cause = &cause
 	if !proto.HasExtension(alert, gtfsrt.E_MercuryAlert) {
@@ -128,21 +138,10 @@ func (e extension) UpdateAlert(ID *string, alert *gtfsrt.Alert) bool {
 	nyctAlert := proto.GetExtension(alert, gtfsrt.E_MercuryAlert).(*gtfsrt.MercuryAlert)
 	_ = nyctAlert
 	for _, informedEntity := range alert.GetInformedEntity() {
-		if !proto.HasExtension(informedEntity, gtfsrt.E_MercuryEntitySelector) {
+		priority, ok := getPriorityFromInformedEntity(informedEntity)
+		if !ok {
 			continue
 		}
-		extendedEntity := proto.GetExtension(informedEntity, gtfsrt.E_MercuryEntitySelector).(*gtfsrt.MercuryEntitySelector)
-		sortOrder := extendedEntity.GetSortOrder()
-		i := strings.LastIndex(sortOrder, ":")
-		if i < 0 {
-			continue
-		}
-		priorityStr := sortOrder[i+1:]
-		priorityInt, err := strconv.Atoi(priorityStr)
-		if err != nil {
-			continue
-		}
-		priority := gtfsrt.MercuryEntitySelector_Priority(priorityInt)
 		if effect, ok := priortyToEffect[priority]; ok {
 			alert.Effect = &effect
 		}
@@ -151,6 +150,24 @@ func (e extension) UpdateAlert(ID *string, alert *gtfsrt.Alert) bool {
 		}
 	}
 	return false
+}
+
+func getPriorityFromInformedEntity(informedEntity *gtfsrt.EntitySelector) (gtfsrt.MercuryEntitySelector_Priority, bool) {
+	if !proto.HasExtension(informedEntity, gtfsrt.E_MercuryEntitySelector) {
+		return 0, false
+	}
+	extendedEntity := proto.GetExtension(informedEntity, gtfsrt.E_MercuryEntitySelector).(*gtfsrt.MercuryEntitySelector)
+	sortOrder := extendedEntity.GetSortOrder()
+	i := strings.LastIndex(sortOrder, ":")
+	if i < 0 {
+		return 0, false
+	}
+	priorityStr := sortOrder[i+1:]
+	priorityInt, err := strconv.Atoi(priorityStr)
+	if err != nil {
+		return 0, false
+	}
+	return gtfsrt.MercuryEntitySelector_Priority(priorityInt), true
 }
 
 var elevatorAlertIDRegex = regexp.MustCompile("([[:alnum:]]{3}?)[SN]?#EL(.*)")
