@@ -1,14 +1,91 @@
 package nyctalerts_test
 
 import (
+	"encoding/json"
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/jamespfennell/gtfs"
 	"github.com/jamespfennell/gtfs/extensions/nyctalerts"
 	gtfsrt "github.com/jamespfennell/gtfs/proto"
 	"google.golang.org/protobuf/proto"
 )
+
+func TestMetadata(t *testing.T) {
+	createdAt := uint64(400*24*60*60 + 100)
+	updatedAt := uint64(400*24*60*60 + 200)
+	displayBeforeActive := uint64(300)
+	activePeriod := "Every Monday"
+	nyctAlert := gtfsrt.MercuryAlert{
+		CreatedAt:           &createdAt,
+		UpdatedAt:           &updatedAt,
+		AlertType:           ptr(""),
+		DisplayBeforeActive: &displayBeforeActive,
+		HumanReadableActivePeriod: &gtfsrt.TranslatedString{
+			Translation: []*gtfsrt.TranslatedString_Translation{
+				{
+					Text: &activePeriod,
+				},
+			},
+		},
+	}
+	wantMetadata := nyctalerts.Metadata{
+		CreatedAt:                 time.Unix(int64(createdAt), 0),
+		UpdatedAt:                 time.Unix(int64(updatedAt), 0),
+		DisplayBeforeActive:       300 * time.Second,
+		HumanReadableActivePeriod: activePeriod,
+	}
+	b, err := json.Marshal(&wantMetadata)
+	if err != nil {
+		t.Fatalf("failed to marshal metadata: %s", err)
+	}
+	wantAlert := gtfs.Alert{
+		ID:    "lmm:planned_work",
+		Cause: gtfs.Maintenance,
+		Description: []gtfs.AlertText{
+			{
+				Text:     string(b),
+				Language: nyctalerts.MetadataLanguage,
+			},
+		},
+	}
+
+	alert := gtfsrt.Alert{}
+	proto.SetExtension(&alert, gtfsrt.E_MercuryAlert, &nyctAlert)
+	message := gtfsrt.FeedMessage{
+		// TODO: why set the header? The parser should be resiliant against it not being set
+		// TODO: handle this in the test util?
+		Header: &gtfsrt.FeedHeader{
+			GtfsRealtimeVersion: ptr("2.0"),
+		},
+		Entity: []*gtfsrt.FeedEntity{
+			{
+				Id:    ptr("lmm:planned_work"),
+				Alert: &alert,
+			},
+		},
+	}
+
+	// TODO: add a test util for all this garbage
+	b, err = proto.Marshal(&message)
+	if err != nil {
+		t.Fatalf("Failed to marshal message: %s", err)
+	}
+	result, err := gtfs.ParseRealtime(b, &gtfs.ParseRealtimeOptions{
+		Extension: nyctalerts.Extension(nyctalerts.ExtensionOpts{
+			AddNyctMetadata: true,
+		}),
+	})
+	if err != nil {
+		t.Errorf("unexpected error in ParseRealtime: %s", err)
+	}
+	// END TODO
+
+	if !reflect.DeepEqual(result.Alerts, []gtfs.Alert{wantAlert}) {
+		t.Errorf(" got != want\n got = %+v\nwant = %+v", result.Alerts, []gtfs.Alert{wantAlert})
+	}
+}
 
 func TestElevatorAlerts(t *testing.T) {
 	createOutAlert := func(alertID string, informedStopID ...string) gtfs.Alert {

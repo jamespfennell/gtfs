@@ -131,7 +131,9 @@ type Alert struct {
 	Effect           AlertEffect
 	ActivePeriods    []AlertActivePeriod
 	InformedEntities []AlertInformedEntity
-	Messages         []AlertMessage
+	Header           []AlertText
+	Description      []AlertText
+	URL              []AlertText
 }
 
 type AlertCause int32
@@ -236,11 +238,9 @@ type AlertInformedEntity struct {
 	StopID      *string
 }
 
-type AlertMessage struct {
-	Header      string
-	Description string
-	URL         string
-	Language    string
+type AlertText struct {
+	Text     string
+	Language string
 }
 
 type ParseRealtimeOptions struct {
@@ -552,14 +552,16 @@ func parseAlert(ID string, alert *gtfsrt.Alert, opts *ParseRealtimeOptions) Aler
 		effect = AccessibilityIssue
 	}
 
-	languageToMessage := map[string]*AlertMessage{}
-	populateMessages(languageToMessage, alert.GetHeaderText(), func(am *AlertMessage) *string { return &am.Header })
-	populateMessages(languageToMessage, alert.GetDescriptionText(), func(am *AlertMessage) *string { return &am.Description })
-	populateMessages(languageToMessage, alert.GetUrl(), func(am *AlertMessage) *string { return &am.URL })
-	var messages []AlertMessage
-	for _, message := range languageToMessage {
-		messages = append(messages, *message)
-	}
+	/*
+		header :=
+		languageToMessage := map[string]*AlertMessage{}
+		populateMessages(languageToMessage, alert.GetHeaderText(), func(am *AlertMessage) *string { return &am.Header })
+		populateMessages(languageToMessage, alert.GetDescriptionText(), func(am *AlertMessage) *string { return &am.Description })
+		populateMessages(languageToMessage, alert.GetUrl(), func(am *AlertMessage) *string { return &am.URL })
+		var messages []AlertMessage
+		for _, message := range languageToMessage {
+			messages = append(messages, *message)
+		}*/
 
 	fmt.Println("Adding", alert.GetInformedEntity())
 	var informedEntites []AlertInformedEntity
@@ -579,16 +581,20 @@ func parseAlert(ID string, alert *gtfsrt.Alert, opts *ParseRealtimeOptions) Aler
 		ID:               ID,
 		Cause:            cause,
 		Effect:           effect,
-		Messages:         messages,
 		InformedEntities: informedEntites,
+		Header:           buildAlertText(alert.GetHeaderText()),
+		Description:      buildAlertText(alert.GetDescriptionText()),
+		URL:              buildAlertText(alert.GetUrl()),
 	}
 }
 
-func populateMessages(languageToMessage map[string]*AlertMessage, ts *gtfsrt.TranslatedString, getter func(*AlertMessage) *string) {
+func buildAlertText(ts *gtfsrt.TranslatedString) []AlertText {
+	var texts []AlertText
 	for _, s := range ts.GetTranslation() {
-		if _, ok := languageToMessage[s.GetLanguage()]; !ok {
-			languageToMessage[s.GetLanguage()] = &AlertMessage{}
-		}
-		*getter(languageToMessage[s.GetLanguage()]) = s.GetText()
+		texts = append(texts, AlertText{
+			Text:     s.GetText(),
+			Language: s.GetLanguage(),
+		})
 	}
+	return texts
 }

@@ -1,6 +1,7 @@
 package nyctalerts
 
 import (
+	"encoding/json"
 	"fmt"
 	"regexp"
 	"strconv"
@@ -58,6 +59,12 @@ type ExtensionOpts struct {
 	//
 	// If true, these alerts are skipped.
 	SkipTimetabledNoServiceAlerts bool
+
+	// The NYCT alerts extension contains many fields like "time alert created at" that don't map to fields in
+	// the standard GTFS realtime proto. If true, all of these fields are placed in a metadata struct of
+	// type [Metadata], serialized to a string, and then included in the GTFS realtime message as a description
+	// string with language set to [MetadataLanguage].
+	AddNyctMetadata bool
 }
 
 // Extension returns the NYCT alerts extension with the provided options applied.
@@ -67,8 +74,14 @@ func Extension(opts ExtensionOpts) extensions.Extension {
 		elevatorAlertsInformUsingStationIDs: opts.ElevatorAlertsInformUsingStationIDs,
 		elevatorAlerts:                      map[string]*gtfsrt.Alert{},
 		skipTimetabledNoServiceAlerts:       opts.SkipTimetabledNoServiceAlerts,
+		addNyctMetadata:                     opts.AddNyctMetadata,
 	}
 }
+
+const (
+	// The value of the language field in the description string containing the metadata.
+	MetadataLanguage = "github.com/jamespfennell/gtfs/extensions/nyctalerts/Metadata"
+)
 
 // Metadata contains some NYCT-specific information on the alert that cannot be mapped to standard GTFS
 // realtime alerts feeds.
@@ -77,20 +90,23 @@ type Metadata struct {
 	UpdatedAt                 time.Time
 	DisplayBeforeActive       time.Duration
 	HumanReadableActivePeriod string
-	AffectedEntitiesMetadata  []AffectedEntityMetadata
+	InformedEntitiesMetadata  []InformedEntityMetadata
 }
 
-type AffectedEntityMetadata struct {
+// InformedEntityMetadata contains some NYCT-specific information on the informed entity in an alert.
+type InformedEntityMetadata struct {
 	SortOrder string
 	Priority  gtfsrt.MercuryEntitySelector_Priority
 }
 
 type extension struct {
+	// TODO: just add opts?
 	elevatorAlertsDeduplicationPolicy   ElevatorAlertsDeduplicationPolicy
 	elevatorAlertsInformUsingStationIDs bool
 	elevatorAlerts                      map[string]*gtfsrt.Alert
 
 	skipTimetabledNoServiceAlerts bool
+	addNyctMetadata               bool
 
 	extensions.NoExtensionImpl
 }
@@ -156,11 +172,7 @@ func (e extension) UpdateAlert(ID *string, alert *gtfsrt.Alert) bool {
 		// TODO: search for Police,NYPD,Medical,etc and use different causes?
 	}
 	alert.Cause = &cause
-	if !proto.HasExtension(alert, gtfsrt.E_MercuryAlert) {
-		return false
-	}
-	nyctAlert := proto.GetExtension(alert, gtfsrt.E_MercuryAlert).(*gtfsrt.MercuryAlert)
-	_ = nyctAlert
+
 	for _, informedEntity := range alert.GetInformedEntity() {
 		priority, ok := getPriorityFromInformedEntity(informedEntity)
 		if !ok {
@@ -173,7 +185,45 @@ func (e extension) UpdateAlert(ID *string, alert *gtfsrt.Alert) bool {
 			return true
 		}
 	}
+	if e.addNyctMetadata {
+		if text, ok := buildMetadata(alert); ok {
+			language := MetadataLanguage
+			descriptionText := alert.GetDescriptionText()
+			if descriptionText == nil {
+				descriptionText = &gtfsrt.TranslatedString{}
+			}
+			descriptionText.Translation = append(descriptionText.GetTranslation(), &gtfsrt.TranslatedString_Translation{
+				Text:     &text,
+				Language: &language,
+			})
+			alert.DescriptionText = descriptionText
+		}
+	}
 	return false
+}
+
+func buildMetadata(alert *gtfsrt.Alert) (string, bool) {
+	if !proto.HasExtension(alert, gtfsrt.E_MercuryAlert) {
+		return "", false
+	}
+	nyctAlert := proto.GetExtension(alert, gtfsrt.E_MercuryAlert).(*gtfsrt.MercuryAlert)
+
+	metadata := Metadata{
+		CreatedAt:           time.Unix(int64(nyctAlert.GetCreatedAt()), 0),
+		UpdatedAt:           time.Unix(int64(nyctAlert.GetUpdatedAt()), 0),
+		DisplayBeforeActive: time.Duration(nyctAlert.GetDisplayBeforeActive()) * time.Second,
+	}
+
+	activePeriodTranslations := nyctAlert.GetHumanReadableActivePeriod().GetTranslation()
+	if len(activePeriodTranslations) > 0 {
+		metadata.HumanReadableActivePeriod = activePeriodTranslations[0].GetText()
+	}
+
+	b, err := json.Marshal(&metadata)
+	if err != nil {
+		return "", false
+	}
+	return string(b), true
 }
 
 func getPriorityFromInformedEntity(informedEntity *gtfsrt.EntitySelector) (gtfsrt.MercuryEntitySelector_Priority, bool) {

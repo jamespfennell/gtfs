@@ -150,9 +150,9 @@ func formatTrip(trip gtfs.Trip, indent int, printStopTimes bool) string {
 
 func formatAlert(alert gtfs.Alert, indent int) string {
 	var header string
-	for _, message := range alert.Messages {
-		if header == "" || len(message.Header) < len(header) {
-			header = message.Header
+	for _, message := range alert.Header {
+		if header == "" || len(message.Text) < len(header) {
+			header = message.Text
 		}
 	}
 	if len(header) > 100 {
