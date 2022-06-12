@@ -7,6 +7,7 @@ import (
 
 	"github.com/jamespfennell/gtfs"
 	"github.com/jamespfennell/gtfs/extensions/nycttrips"
+	"github.com/jamespfennell/gtfs/internal/testutil"
 	gtfsrt "github.com/jamespfennell/gtfs/proto"
 	"google.golang.org/protobuf/proto"
 )
@@ -155,33 +156,23 @@ func TestFilterStaleUnassignedTrips(t *testing.T) {
 		t.Run(fmt.Sprintf("case_%d", i), func(t *testing.T) {
 			tripDescriptor := &gtfsrt.TripDescriptor{}
 			proto.SetExtension(tripDescriptor, gtfsrt.E_NyctTripDescriptor, &gtfsrt.NyctTripDescriptor{})
-			message := gtfsrt.FeedMessage{
-				Header: &gtfsrt.FeedHeader{
-					GtfsRealtimeVersion: ptr("2.0"),
-					Timestamp:           &feedTime,
-				},
-				Entity: []*gtfsrt.FeedEntity{
-					{
-						Id: ptr("1"),
-						TripUpdate: &gtfsrt.TripUpdate{
-							Trip:           tripDescriptor,
-							StopTimeUpdate: []*gtfsrt.TripUpdate_StopTimeUpdate{tc.FirstStopTime},
-						},
+			entities := []*gtfsrt.FeedEntity{
+				{
+					Id: ptr("1"),
+					TripUpdate: &gtfsrt.TripUpdate{
+						Trip:           tripDescriptor,
+						StopTimeUpdate: []*gtfsrt.TripUpdate_StopTimeUpdate{tc.FirstStopTime},
 					},
 				},
 			}
-
-			b, err := proto.Marshal(&message)
-			if err != nil {
-				t.Fatalf("Failed to marshal message: %s", err)
+			header := &gtfsrt.FeedHeader{
+				GtfsRealtimeVersion: ptr("2.0"),
+				Timestamp:           &feedTime,
 			}
 
-			result, err := gtfs.ParseRealtime(b, &gtfs.ParseRealtimeOptions{
+			result := testutil.MustParse(t, header, entities, &gtfs.ParseRealtimeOptions{
 				Extension: nycttrips.Extension(true),
 			})
-			if err != nil {
-				t.Errorf("unexpected error in ParseRealtime: %s", err)
-			}
 			if len(result.Trips) != tc.ExpectedNumTrips {
 				t.Errorf("len(result.Trips)=%d, wanted %d", len(result.Trips), tc.ExpectedNumTrips)
 			}

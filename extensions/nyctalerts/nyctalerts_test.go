@@ -8,6 +8,7 @@ import (
 
 	"github.com/jamespfennell/gtfs"
 	"github.com/jamespfennell/gtfs/extensions/nyctalerts"
+	"github.com/jamespfennell/gtfs/internal/testutil"
 	gtfsrt "github.com/jamespfennell/gtfs/proto"
 	"google.golang.org/protobuf/proto"
 )
@@ -30,6 +31,15 @@ func TestMetadata(t *testing.T) {
 			},
 		},
 	}
+	alert := gtfsrt.Alert{}
+	proto.SetExtension(&alert, gtfsrt.E_MercuryAlert, &nyctAlert)
+	entities := []*gtfsrt.FeedEntity{
+		{
+			Id:    ptr("lmm:planned_work"),
+			Alert: &alert,
+		},
+	}
+
 	wantMetadata := nyctalerts.Metadata{
 		CreatedAt:                 time.Unix(int64(createdAt), 0),
 		UpdatedAt:                 time.Unix(int64(updatedAt), 0),
@@ -51,36 +61,11 @@ func TestMetadata(t *testing.T) {
 		},
 	}
 
-	alert := gtfsrt.Alert{}
-	proto.SetExtension(&alert, gtfsrt.E_MercuryAlert, &nyctAlert)
-	message := gtfsrt.FeedMessage{
-		// TODO: why set the header? The parser should be resiliant against it not being set
-		// TODO: handle this in the test util?
-		Header: &gtfsrt.FeedHeader{
-			GtfsRealtimeVersion: ptr("2.0"),
-		},
-		Entity: []*gtfsrt.FeedEntity{
-			{
-				Id:    ptr("lmm:planned_work"),
-				Alert: &alert,
-			},
-		},
-	}
-
-	// TODO: add a test util for all this garbage
-	b, err = proto.Marshal(&message)
-	if err != nil {
-		t.Fatalf("Failed to marshal message: %s", err)
-	}
-	result, err := gtfs.ParseRealtime(b, &gtfs.ParseRealtimeOptions{
+	result := testutil.MustParse(t, nil, entities, &gtfs.ParseRealtimeOptions{
 		Extension: nyctalerts.Extension(nyctalerts.ExtensionOpts{
 			AddNyctMetadata: true,
 		}),
 	})
-	if err != nil {
-		t.Errorf("unexpected error in ParseRealtime: %s", err)
-	}
-	// END TODO
 
 	if !reflect.DeepEqual(result.Alerts, []gtfs.Alert{wantAlert}) {
 		t.Errorf(" got != want\n got = %+v\nwant = %+v", result.Alerts, []gtfs.Alert{wantAlert})
