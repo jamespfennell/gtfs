@@ -303,15 +303,10 @@ func ParseRealtime(content []byte, opts *ParseRealtimeOptions) (*Realtime, error
 
 		if tripUpdate := entity.TripUpdate; tripUpdate != nil {
 			trip, vehicle, ok = parseTripUpdate(tripUpdate, opts, feedMessage.GetHeader().GetTimestamp())
-		} else if vehiclePosition := entity.Vehicle; vehicle != nil {
-			// TODO: crazy bug right here!!! vehicle should be vehiclePosition
+		} else if vehiclePosition := entity.Vehicle; vehiclePosition != nil {
 			trip, vehicle, ok = parseVehicle(vehiclePosition, opts, feedMessage.GetHeader().GetTimestamp())
 		} else if alert := entity.Alert; alert != nil {
-			alert, shouldSkip := parseAlert(entity.GetId(), alert, opts)
-			if shouldSkip {
-				continue
-			}
-			result.Alerts = append(result.Alerts, alert)
+			result.Alerts = append(result.Alerts, parseAlert(entity.GetId(), alert, opts))
 			continue
 		} else {
 			continue
@@ -508,7 +503,7 @@ func convertDirectionID(raw *uint32) DirectionID {
 	return DirectionIDTrue
 }
 
-func parseAlert(ID string, alert *gtfsrt.Alert, opts *ParseRealtimeOptions) (Alert, bool) {
+func parseAlert(ID string, alert *gtfsrt.Alert, opts *ParseRealtimeOptions) Alert {
 	cause := UnknownCause
 	switch alert.GetCause() {
 	case gtfsrt.Alert_OTHER_CAUSE:
@@ -586,7 +581,7 @@ func parseAlert(ID string, alert *gtfsrt.Alert, opts *ParseRealtimeOptions) (Ale
 		Effect:           effect,
 		Messages:         messages,
 		InformedEntities: informedEntites,
-	}, false
+	}
 }
 
 func populateMessages(languageToMessage map[string]*AlertMessage, ts *gtfsrt.TranslatedString, getter func(*AlertMessage) *string) {
