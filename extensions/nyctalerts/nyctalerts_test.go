@@ -178,24 +178,11 @@ func TestElevatorAlerts(t *testing.T) {
 					},
 				})
 			}
-			message := gtfsrt.FeedMessage{
-				Header: &gtfsrt.FeedHeader{
-					GtfsRealtimeVersion: ptr("2.0"),
-				},
-				Entity: alerts,
-			}
-			b, err := proto.Marshal(&message)
-			if err != nil {
-				t.Fatalf("Failed to marshal message: %s", err)
-			}
-			_ = b
 
-			result, err := gtfs.ParseRealtime(b, &gtfs.ParseRealtimeOptions{
+			result := testutil.MustParse(t, nil, alerts, &gtfs.ParseRealtimeOptions{
 				Extension: nyctalerts.Extension(tc.opts),
 			})
-			if err != nil {
-				t.Errorf("unexpected error in ParseRealtime: %s", err)
-			}
+
 			if !reflect.DeepEqual(result.Alerts, tc.wantAlerts) {
 				t.Errorf("got != want\n got=%+v\nwant=%+v", result.Alerts, tc.wantAlerts)
 			}

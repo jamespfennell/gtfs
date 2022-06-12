@@ -60,33 +60,23 @@ func TestGetTrack(t *testing.T) {
 					ActualTrack:    testCase.ActualTrack,
 				})
 			}
-			message := gtfsrt.FeedMessage{
-				Header: &gtfsrt.FeedHeader{
-					GtfsRealtimeVersion: ptr("2.0"),
-				},
-				Entity: []*gtfsrt.FeedEntity{
-					{
-						Id: ptr("1"),
-						TripUpdate: &gtfsrt.TripUpdate{
-							Trip: &gtfsrt.TripDescriptor{
-								TripId: ptr(tripID1),
-							},
-							StopTimeUpdate: []*gtfsrt.TripUpdate_StopTimeUpdate{&stopTimeUpdate},
+
+			entities := []*gtfsrt.FeedEntity{
+				{
+					Id: ptr("1"),
+					TripUpdate: &gtfsrt.TripUpdate{
+						Trip: &gtfsrt.TripDescriptor{
+							TripId: ptr(tripID1),
 						},
+						StopTimeUpdate: []*gtfsrt.TripUpdate_StopTimeUpdate{&stopTimeUpdate},
 					},
 				},
 			}
-			b, err := proto.Marshal(&message)
-			if err != nil {
-				t.Fatalf("Failed to marshal message: %s", err)
-			}
 
-			result, err := gtfs.ParseRealtime(b, &gtfs.ParseRealtimeOptions{
+			result := testutil.MustParse(t, nil, entities, &gtfs.ParseRealtimeOptions{
 				Extension: nycttrips.Extension(true),
 			})
-			if err != nil {
-				t.Errorf("unexpected error in ParseRealtime: %s", err)
-			}
+
 			expected := []gtfs.Trip{
 				{
 					ID: gtfs.TripID{
@@ -173,6 +163,7 @@ func TestFilterStaleUnassignedTrips(t *testing.T) {
 			result := testutil.MustParse(t, header, entities, &gtfs.ParseRealtimeOptions{
 				Extension: nycttrips.Extension(true),
 			})
+
 			if len(result.Trips) != tc.ExpectedNumTrips {
 				t.Errorf("len(result.Trips)=%d, wanted %d", len(result.Trips), tc.ExpectedNumTrips)
 			}

@@ -1,12 +1,13 @@
-package gtfs
+package gtfs_test
 
 import (
 	"reflect"
 	"testing"
 	"time"
 
+	"github.com/jamespfennell/gtfs"
+	"github.com/jamespfennell/gtfs/internal/testutil"
 	gtfsrt "github.com/jamespfennell/gtfs/proto"
-	"google.golang.org/protobuf/proto"
 )
 
 const tripID1 = "tripID1"
@@ -15,58 +16,53 @@ const vehicleID1 = "vehicleID1"
 var time1 time.Time = time.Unix(2<<28, 0).UTC()
 
 func TestSoloTrip(t *testing.T) {
-
 	timestamp := uint64(time1.Unix())
-	message := gtfsrt.FeedMessage{
-		Header: &gtfsrt.FeedHeader{
-			GtfsRealtimeVersion: ptr("2.0"),
-			Timestamp:           &timestamp,
-		},
-		Entity: []*gtfsrt.FeedEntity{
-			{
-				Id: ptr("1"),
-				TripUpdate: &gtfsrt.TripUpdate{
-					Trip: &gtfsrt.TripDescriptor{
-						TripId: ptr(tripID1),
-					},
-					Vehicle: &gtfsrt.VehicleDescriptor{
-						Id: ptr(vehicleID1),
-					},
+	header := &gtfsrt.FeedHeader{
+		GtfsRealtimeVersion: ptr("2.0"),
+		Timestamp:           &timestamp,
+	}
+	entities := []*gtfsrt.FeedEntity{
+		{
+			Id: ptr("1"),
+			TripUpdate: &gtfsrt.TripUpdate{
+				Trip: &gtfsrt.TripDescriptor{
+					TripId: ptr(tripID1),
+				},
+				Vehicle: &gtfsrt.VehicleDescriptor{
+					Id: ptr(vehicleID1),
 				},
 			},
 		},
 	}
-	b, err := proto.Marshal(&message)
-	if err != nil {
-		t.Fatalf("Failed to marshal message: %s", err)
-	}
 
-	trip := Trip{
-		ID: TripID{
+	trip := gtfs.Trip{
+		ID: gtfs.TripID{
 			ID:          tripID1,
-			DirectionID: DirectionIDUnspecified,
+			DirectionID: gtfs.DirectionIDUnspecified,
 		},
 		IsEntityInMessage: true,
 	}
-	vehicle := Vehicle{
-		ID: &VehicleID{
+	vehicle := gtfs.Vehicle{
+		ID: &gtfs.VehicleID{
 			ID: vehicleID1,
 		},
 		IsEntityInMessage: false,
 	}
 	trip.Vehicle = &vehicle
 	vehicle.Trip = &trip
-	expectedResult := &Realtime{
+	expectedResult := &gtfs.Realtime{
 		CreatedAt: time1,
-		Trips:     []Trip{trip},
-		Vehicles:  []Vehicle{vehicle},
+		Trips:     []gtfs.Trip{trip},
+		Vehicles:  []gtfs.Vehicle{vehicle},
 	}
 
-	result, err := ParseRealtime(b, &ParseRealtimeOptions{})
-	if err != nil {
-		t.Errorf("unexpected error in ParseRealtime: %s", err)
-	}
+	result := testutil.MustParse(t, header, entities, &gtfs.ParseRealtimeOptions{})
+
 	if !reflect.DeepEqual(result, expectedResult) {
 		t.Errorf("actual:\n%+v\n!= expected:\n%+v", result, expectedResult)
 	}
+}
+
+func ptr(s string) *string {
+	return &s
 }
