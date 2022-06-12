@@ -27,6 +27,7 @@ type extension struct {
 }
 
 func (e extension) UpdateTrip(trip *gtfsrt.TripUpdate, feedCreatedAt uint64) extensions.UpdateTripResult {
+	// TODO: ensure that if isAssigned is true then the vehicle is populated, otherwise populate it somehow
 	isAssigned := e.updateTripOrVehicle(trip)
 	shouldSkip := proto.HasExtension(trip.GetTrip(), gtfsrt.E_NyctTripDescriptor) &&
 		e.filterStaleUnassignedTrips && isStaleUnassignedTrip(isAssigned, trip.StopTimeUpdate, feedCreatedAt)

@@ -30,6 +30,10 @@ type ExtensionOpts struct {
 	// Alerts for different platforms in the same station are consolidiated.
 	UseStationIDsForElevatorAlerts bool
 
+	ElevatorAlertsUseStationIDForInformedEntity bool
+	ElevatorAlertsDeduplicatePlatforms          bool
+	ElevatorAlertsDeduplicateStations           bool
+
 	// When there are no trains running for a route due to the standard timetable (e.g., there are no C trains
 	// overnight), the MTA publishes an alert. Arguably this is not really an alert becuase this information is
 	// already in the timetable.
@@ -41,9 +45,10 @@ type ExtensionOpts struct {
 // Extension returns the NYCT alerts extension with the provided options applied.
 func Extension(opts ExtensionOpts) extensions.Extension {
 	return extension{
-		deduplicateElevatorAlerts:     opts.DeduplicateElevatorAlerts,
-		elevatorAlerts:                map[string]*gtfsrt.Alert{},
-		skipTimetabledNoServiceAlerts: opts.SkipTimetabledNoServiceAlerts,
+		deduplicateElevatorAlerts:      opts.DeduplicateElevatorAlerts,
+		useStationIDsForElevatorAlerts: opts.UseStationIDsForElevatorAlerts,
+		elevatorAlerts:                 map[string]*gtfsrt.Alert{},
+		skipTimetabledNoServiceAlerts:  opts.SkipTimetabledNoServiceAlerts,
 	}
 }
 
@@ -63,8 +68,9 @@ type AffectedEntityMetadata struct {
 }
 
 type extension struct {
-	deduplicateElevatorAlerts bool
-	elevatorAlerts            map[string]*gtfsrt.Alert
+	deduplicateElevatorAlerts      bool
+	useStationIDsForElevatorAlerts bool
+	elevatorAlerts                 map[string]*gtfsrt.Alert
 
 	skipTimetabledNoServiceAlerts bool
 
@@ -170,7 +176,7 @@ func getPriorityFromInformedEntity(informedEntity *gtfsrt.EntitySelector) (gtfsr
 	return gtfsrt.MercuryEntitySelector_Priority(priorityInt), true
 }
 
-var elevatorAlertIDRegex = regexp.MustCompile("([[:alnum:]]{3}?)[SN]?#EL(.*)")
+var elevatorAlertIDRegex = regexp.MustCompile("([[:alnum:]]{3}?)([SN]?)#EL(.*)")
 
 func (e extension) updateElevatorAlert(ID *string, alert *gtfsrt.Alert) bool {
 	match := elevatorAlertIDRegex.FindStringSubmatch(*ID)
@@ -181,21 +187,41 @@ func (e extension) updateElevatorAlert(ID *string, alert *gtfsrt.Alert) bool {
 	alert.Cause = &cause
 	effect := gtfsrt.Alert_ACCESSIBILITY_ISSUE
 	alert.Effect = &effect
-	if !e.deduplicateElevatorAlerts {
+	if !e.deduplicateElevatorAlerts && !e.useStationIDsForElevatorAlerts {
 		return false
 	}
-	stopID := match[1]
-	elevatorID := match[2]
-	newID := fmt.Sprintf("elevator:EL%s", elevatorID)
+	var stopID string
+	if e.useStationIDsForElevatorAlerts {
+		stopID = match[1]
+	} else {
+		stopID = match[1] + match[2]
+	}
+	elevatorID := match[3]
+	var newID string
+	if e.deduplicateElevatorAlerts {
+		newID = fmt.Sprintf("elevator:EL%s", elevatorID)
+	} else {
+		newID = fmt.Sprintf("%s#EL%s", stopID, elevatorID)
+	}
 	*ID = newID
 	deduplicatedAlert, alreadyExists := e.elevatorAlerts[newID]
 	if deduplicatedAlert == nil {
 		deduplicatedAlert = alert
 		deduplicatedAlert.InformedEntity = []*gtfsrt.EntitySelector{}
 	}
-	deduplicatedAlert.InformedEntity = append(deduplicatedAlert.InformedEntity, &gtfsrt.EntitySelector{
-		StopId: &stopID,
-	})
+	var hasInformedEntity bool
+	for _, entity := range deduplicatedAlert.InformedEntity {
+		if entity.StopId != nil && *entity.StopId == stopID {
+			hasInformedEntity = true
+			break
+		}
+	}
+	if !hasInformedEntity {
+		deduplicatedAlert.InformedEntity = append(deduplicatedAlert.InformedEntity, &gtfsrt.EntitySelector{
+			StopId: &stopID,
+		})
+	}
 	e.elevatorAlerts[newID] = deduplicatedAlert
+	fmt.Println(deduplicatedAlert)
 	return alreadyExists
 }

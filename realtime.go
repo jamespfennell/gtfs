@@ -276,12 +276,27 @@ func ParseRealtime(content []byte, opts *ParseRealtimeOptions) (*Realtime, error
 		result.CreatedAt = createdAt
 	}
 
+	shouldSkip := make([]bool, len(feedMessage.GetEntity()))
+	for i, entity := range feedMessage.Entity {
+		if tripUpdate := entity.GetTripUpdate(); tripUpdate != nil {
+			r := opts.Extension.UpdateTrip(tripUpdate, feedMessage.GetHeader().GetTimestamp())
+			shouldSkip[i] = r.ShouldSkip
+		} else if vehiclePosition := entity.GetVehicle(); vehiclePosition != nil {
+			opts.Extension.UpdateVehicle(vehiclePosition)
+		} else if alert := entity.Alert; alert != nil {
+			shouldSkip[i] = opts.Extension.UpdateAlert(entity.Id, alert)
+		}
+	}
+
 	tripsById := map[TripID]*Trip{}
 	vehiclesByID := map[VehicleID]*Vehicle{}
 	tripIDToVehicleID := map[TripID]VehicleID{}
 	vehicleIDToTripID := map[VehicleID]TripID{}
 	vehiclesWithNoID := []Vehicle{}
-	for _, entity := range feedMessage.Entity {
+	for i, entity := range feedMessage.Entity {
+		if shouldSkip[i] {
+			continue
+		}
 		var trip *Trip
 		var vehicle *Vehicle
 		var ok bool
@@ -289,6 +304,7 @@ func ParseRealtime(content []byte, opts *ParseRealtimeOptions) (*Realtime, error
 		if tripUpdate := entity.TripUpdate; tripUpdate != nil {
 			trip, vehicle, ok = parseTripUpdate(tripUpdate, opts, feedMessage.GetHeader().GetTimestamp())
 		} else if vehiclePosition := entity.Vehicle; vehicle != nil {
+			// TODO: crazy bug right here!!! vehicle should be vehiclePosition
 			trip, vehicle, ok = parseVehicle(vehiclePosition, opts, feedMessage.GetHeader().GetTimestamp())
 		} else if alert := entity.Alert; alert != nil {
 			alert, shouldSkip := parseAlert(entity.GetId(), alert, opts)
@@ -353,13 +369,8 @@ func parseTripUpdate(tripUpdate *gtfsrt.TripUpdate, opts *ParseRealtimeOptions, 
 	if tripUpdate.Trip == nil {
 		return nil, nil, false
 	}
-	updateTripResult := opts.Extension.UpdateTrip(tripUpdate, feedCreatedAt)
-	if updateTripResult.ShouldSkip {
-		return nil, nil, false
-	}
 	trip := &Trip{
 		ID:                parseTripDescriptor(tripUpdate.Trip, opts),
-		NyctIsAssigned:    updateTripResult.NyctIsAssigned,
 		IsEntityInMessage: true,
 	}
 	convertStopTimeEvent := func(stopTimeEvent *gtfsrt.TripUpdate_StopTimeEvent) *StopTimeEvent {
@@ -399,7 +410,6 @@ func parseTripUpdate(tripUpdate *gtfsrt.TripUpdate, opts *ParseRealtimeOptions, 
 }
 
 func parseVehicle(vehiclePosition *gtfsrt.VehiclePosition, opts *ParseRealtimeOptions, feedCreatedAt uint64) (*Trip, *Vehicle, bool) {
-	opts.Extension.UpdateVehicle(vehiclePosition)
 	vehicle := &Vehicle{
 		ID:                parseVehicleDescriptor(vehiclePosition.Vehicle, opts),
 		IsEntityInMessage: true,
@@ -499,9 +509,6 @@ func convertDirectionID(raw *uint32) DirectionID {
 }
 
 func parseAlert(ID string, alert *gtfsrt.Alert, opts *ParseRealtimeOptions) (Alert, bool) {
-	if shouldSkip := opts.Extension.UpdateAlert(&ID, alert); shouldSkip {
-		return Alert{}, true
-	}
 	cause := UnknownCause
 	switch alert.GetCause() {
 	case gtfsrt.Alert_OTHER_CAUSE:
@@ -559,6 +566,7 @@ func parseAlert(ID string, alert *gtfsrt.Alert, opts *ParseRealtimeOptions) (Ale
 		messages = append(messages, *message)
 	}
 
+	fmt.Println("Adding", alert.GetInformedEntity())
 	var informedEntites []AlertInformedEntity
 	for _, entity := range alert.GetInformedEntity() {
 		informedEntites = append(informedEntites, AlertInformedEntity{

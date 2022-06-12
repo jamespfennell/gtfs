@@ -5,6 +5,8 @@ import (
 )
 
 type Extension interface {
+	// TODO PreprocessTrip etc
+	// TODO remove isAssigned
 	UpdateTrip(trip *gtfsrt.TripUpdate, feedCreatedAt uint64) UpdateTripResult
 
 	UpdateVehicle(vehicle *gtfsrt.VehiclePosition)
