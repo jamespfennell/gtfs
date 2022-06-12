@@ -32,10 +32,10 @@ func TestElevatorAlerts(t *testing.T) {
 		wantAlerts []gtfs.Alert
 	}{
 		{
-			name: "no deduplication",
+			name: "no deduplication/platform IDs",
 			opts: nyctalerts.ExtensionOpts{
-				DeduplicateElevatorAlerts:      false,
-				UseStationIDsForElevatorAlerts: false,
+				ElevatorAlertsDeduplicationPolicy:   nyctalerts.NoDeduplication,
+				ElevatorAlertsInformUsingStationIDs: false,
 			},
 			wantAlerts: []gtfs.Alert{
 				createOutAlert("R25N#EL728", "R25N"),
@@ -45,10 +45,34 @@ func TestElevatorAlerts(t *testing.T) {
 			},
 		},
 		{
-			name: "platform ID to station ID",
+			name: "no deduplication/station IDs",
 			opts: nyctalerts.ExtensionOpts{
-				DeduplicateElevatorAlerts:      false,
-				UseStationIDsForElevatorAlerts: true,
+				ElevatorAlertsDeduplicationPolicy:   nyctalerts.NoDeduplication,
+				ElevatorAlertsInformUsingStationIDs: true,
+			},
+			wantAlerts: []gtfs.Alert{
+				createOutAlert("R25N#EL728", "R25"),
+				createOutAlert("R25S#EL728", "R25"),
+				createOutAlert("E01N#EL728", "E01"),
+				createOutAlert("E01S#EL728", "E01"),
+			},
+		},
+		{
+			name: "station deduplication/platform IDs",
+			opts: nyctalerts.ExtensionOpts{
+				ElevatorAlertsDeduplicationPolicy:   nyctalerts.DeduplicateInStation,
+				ElevatorAlertsInformUsingStationIDs: false,
+			},
+			wantAlerts: []gtfs.Alert{
+				createOutAlert("R25#EL728", "R25N", "R25S"),
+				createOutAlert("E01#EL728", "E01N", "E01S"),
+			},
+		},
+		{
+			name: "station deduplication/station IDs",
+			opts: nyctalerts.ExtensionOpts{
+				ElevatorAlertsDeduplicationPolicy:   nyctalerts.DeduplicateInStation,
+				ElevatorAlertsInformUsingStationIDs: true,
 			},
 			wantAlerts: []gtfs.Alert{
 				createOutAlert("R25#EL728", "R25"),
@@ -56,20 +80,20 @@ func TestElevatorAlerts(t *testing.T) {
 			},
 		},
 		{
-			name: "deduplicate with platform ID",
+			name: "complex deduplication/platform IDs",
 			opts: nyctalerts.ExtensionOpts{
-				DeduplicateElevatorAlerts:      true,
-				UseStationIDsForElevatorAlerts: false,
+				ElevatorAlertsDeduplicationPolicy:   nyctalerts.DeduplicateInComplex,
+				ElevatorAlertsInformUsingStationIDs: false,
 			},
 			wantAlerts: []gtfs.Alert{
 				createOutAlert("elevator:EL728", "R25N", "R25S", "E01N", "E01S"),
 			},
 		},
 		{
-			name: "deduplicate with station ID",
+			name: "complex deduplication/station IDs",
 			opts: nyctalerts.ExtensionOpts{
-				DeduplicateElevatorAlerts:      true,
-				UseStationIDsForElevatorAlerts: true,
+				ElevatorAlertsDeduplicationPolicy:   nyctalerts.DeduplicateInComplex,
+				ElevatorAlertsInformUsingStationIDs: true,
 			},
 			wantAlerts: []gtfs.Alert{
 				createOutAlert("elevator:EL728", "R25", "E01"),

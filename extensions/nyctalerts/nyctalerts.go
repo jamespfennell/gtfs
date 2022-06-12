@@ -12,27 +12,45 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
+// ElevatorAlertsDeduplicationPolicy is an enum that specifies how elevator alerts should be deduplicated.
+//
+// The MTA publishes duplicate alerts for elevator outages. For each elevator and each affected platform
+// (e.g. A27N) there is a separate alert with ID `<platform_id>#<elevator_id>`. This extension supports
+// deduplicating these alerts either by combining alerts for the station (A27N, A27S) or the same
+// station complex (A27N, A27S, E01N, E01S) into one. The value of this enum in the [ExtensionOpts] determines
+// which type of deduplication to perform. See the constants values of this enum for possible options.
+type ElevatorAlertsDeduplicationPolicy int8
+
+const (
+	// Do not deduplicate any elevator alerts. This is the default.
+	NoDeduplication ElevatorAlertsDeduplicationPolicy = 0
+
+	// Deduplicate alerts for the same station. Remember that in the subway's GTFS static design a station
+	// is two platforms like the L train platforms at Union Square. To deduplicate across the whole
+	// physical station use [DeduplicateComplex] instead.
+	//
+	// With this option, the ID of the combined alert will be `<station_id>#<elevator_id>`.
+	DeduplicateInStation ElevatorAlertsDeduplicationPolicy = 1
+
+	// Deduplicate alerts for the same station complex.
+	//
+	// With this option, the ID of the combined alert will be `elevator:<elevator_id>`.
+	DeduplicateInComplex ElevatorAlertsDeduplicationPolicy = 2
+)
+
 // ExtensionOpts contains the options for the NYCT alerts extension.
 type ExtensionOpts struct {
-	// The MTA publishes duplicate alerts for elevator outages. For each elevator and each affected platform
-	// (e.g. L03N) there is a separate alert with ID `<stop_id>?#<elevator_id>`.
-	//
-	// If true, these alerts are consolidated into a single alert with ID `elevator:<elevator_id>`.
-	DeduplicateElevatorAlerts bool
+	// The deduplication policy to apply. See the enum type's documentation for guidance.
+	ElevatorAlertsDeduplicationPolicy ElevatorAlertsDeduplicationPolicy
 
-	// The MTA's elevator alerts use the platform (e.g. L03N) for the affected entity and in the ID. This makes
+	// The MTA's elevator alerts use the platform (e.g. L03N) for the affected entity. This makes
 	// sense in some cases because an elevator may only serve one platform if the station does not offer a transfer
 	// between platforms (for example, the 14th and 6av station). However for regular stations this results in
-	// duplicate alerts because both platforms get an alert (e.g., A27N and A27S). In this case it makes sense
-	// to use the station ID A27.
+	// essentially duplicate informed entities because both platforms get an alert (e.g., A27N and A27S).
+	// In this case it makes sense to use the station ID A27 as the informed enttiy.
 	//
-	// If true, platform IDs are replaced by station IDs in the alert ID and in the list of effected entities.
-	// Alerts for different platforms in the same station are consolidiated.
-	UseStationIDsForElevatorAlerts bool
-
-	ElevatorAlertsUseStationIDForInformedEntity bool
-	ElevatorAlertsDeduplicatePlatforms          bool
-	ElevatorAlertsDeduplicateStations           bool
+	// If true, platform IDs are replaced by station IDs in the informed entities.
+	ElevatorAlertsInformUsingStationIDs bool
 
 	// When there are no trains running for a route due to the standard timetable (e.g., there are no C trains
 	// overnight), the MTA publishes an alert. Arguably this is not really an alert becuase this information is
@@ -45,10 +63,10 @@ type ExtensionOpts struct {
 // Extension returns the NYCT alerts extension with the provided options applied.
 func Extension(opts ExtensionOpts) extensions.Extension {
 	return extension{
-		deduplicateElevatorAlerts:      opts.DeduplicateElevatorAlerts,
-		useStationIDsForElevatorAlerts: opts.UseStationIDsForElevatorAlerts,
-		elevatorAlerts:                 map[string]*gtfsrt.Alert{},
-		skipTimetabledNoServiceAlerts:  opts.SkipTimetabledNoServiceAlerts,
+		elevatorAlertsDeduplicationPolicy:   opts.ElevatorAlertsDeduplicationPolicy,
+		elevatorAlertsInformUsingStationIDs: opts.ElevatorAlertsInformUsingStationIDs,
+		elevatorAlerts:                      map[string]*gtfsrt.Alert{},
+		skipTimetabledNoServiceAlerts:       opts.SkipTimetabledNoServiceAlerts,
 	}
 }
 
@@ -68,9 +86,9 @@ type AffectedEntityMetadata struct {
 }
 
 type extension struct {
-	deduplicateElevatorAlerts      bool
-	useStationIDsForElevatorAlerts bool
-	elevatorAlerts                 map[string]*gtfsrt.Alert
+	elevatorAlertsDeduplicationPolicy   ElevatorAlertsDeduplicationPolicy
+	elevatorAlertsInformUsingStationIDs bool
+	elevatorAlerts                      map[string]*gtfsrt.Alert
 
 	skipTimetabledNoServiceAlerts bool
 
@@ -187,22 +205,28 @@ func (e extension) updateElevatorAlert(ID *string, alert *gtfsrt.Alert) bool {
 	alert.Cause = &cause
 	effect := gtfsrt.Alert_ACCESSIBILITY_ISSUE
 	alert.Effect = &effect
-	if !e.deduplicateElevatorAlerts && !e.useStationIDsForElevatorAlerts {
-		return false
-	}
-	var stopID string
-	if e.useStationIDsForElevatorAlerts {
-		stopID = match[1]
-	} else {
-		stopID = match[1] + match[2]
-	}
+
+	platformID := match[1] + match[2]
+	stationID := match[1]
 	elevatorID := match[3]
-	var newID string
-	if e.deduplicateElevatorAlerts {
-		newID = fmt.Sprintf("elevator:EL%s", elevatorID)
+
+	var informedEntityID string
+	if e.elevatorAlertsInformUsingStationIDs {
+		informedEntityID = stationID
 	} else {
-		newID = fmt.Sprintf("%s#EL%s", stopID, elevatorID)
+		informedEntityID = platformID
 	}
+
+	var newID string
+	switch e.elevatorAlertsDeduplicationPolicy {
+	case DeduplicateInStation:
+		newID = fmt.Sprintf("%s#EL%s", stationID, elevatorID)
+	case DeduplicateInComplex:
+		newID = fmt.Sprintf("elevator:EL%s", elevatorID)
+	default:
+		newID = fmt.Sprintf("%s#EL%s", platformID, elevatorID)
+	}
+
 	*ID = newID
 	deduplicatedAlert, alreadyExists := e.elevatorAlerts[newID]
 	if deduplicatedAlert == nil {
@@ -211,17 +235,16 @@ func (e extension) updateElevatorAlert(ID *string, alert *gtfsrt.Alert) bool {
 	}
 	var hasInformedEntity bool
 	for _, entity := range deduplicatedAlert.InformedEntity {
-		if entity.StopId != nil && *entity.StopId == stopID {
+		if entity.StopId != nil && *entity.StopId == informedEntityID {
 			hasInformedEntity = true
 			break
 		}
 	}
 	if !hasInformedEntity {
 		deduplicatedAlert.InformedEntity = append(deduplicatedAlert.InformedEntity, &gtfsrt.EntitySelector{
-			StopId: &stopID,
+			StopId: &informedEntityID,
 		})
 	}
 	e.elevatorAlerts[newID] = deduplicatedAlert
-	fmt.Println(deduplicatedAlert)
 	return alreadyExists
 }

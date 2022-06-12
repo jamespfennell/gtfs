@@ -74,9 +74,9 @@ func main() {
 						}
 					case "nyctalerts":
 						opts.Extension = nyctalerts.Extension(nyctalerts.ExtensionOpts{
-							DeduplicateElevatorAlerts:      true,
-							UseStationIDsForElevatorAlerts: true,
-							SkipTimetabledNoServiceAlerts:  true,
+							ElevatorAlertsDeduplicationPolicy:   nyctalerts.DeduplicateInComplex,
+							ElevatorAlertsInformUsingStationIDs: true,
+							SkipTimetabledNoServiceAlerts:       true,
 						})
 						americaNewYorkTimezone, err := time.LoadLocation("America/New_York")
 						if err == nil {
