@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/jamespfennell/gtfs/nyct"
+	"github.com/jamespfennell/gtfs/extensions"
 	gtfsrt "github.com/jamespfennell/gtfs/proto"
 	"google.golang.org/protobuf/proto"
 )
@@ -36,6 +36,8 @@ type Realtime struct {
 	Trips []Trip
 
 	Vehicles []Vehicle
+
+	Alerts []Alert
 }
 
 type Trip struct {
@@ -123,18 +125,79 @@ func (vehicle *Vehicle) GetTrip() Trip {
 	return Trip{}
 }
 
+type Alert struct {
+	ID               string
+	Cause            AlertCause
+	Effect           AlertEffect
+	ActivePeriods    []AlertActivePeriod
+	InformedEntities []AlertInformedEntity
+	Header           []AlertText
+	Description      []AlertText
+	URL              []AlertText
+}
+
+type AlertCause = gtfsrt.Alert_Cause
+
+const (
+	UnknownCause     AlertCause = gtfsrt.Alert_UNKNOWN_CAUSE
+	OtherCause       AlertCause = gtfsrt.Alert_OTHER_CAUSE
+	TechnicalProblem AlertCause = gtfsrt.Alert_TECHNICAL_PROBLEM
+	Strike           AlertCause = gtfsrt.Alert_STRIKE
+	Demonstration    AlertCause = gtfsrt.Alert_DEMONSTRATION
+	Accident         AlertCause = gtfsrt.Alert_ACCIDENT
+	Holiday          AlertCause = gtfsrt.Alert_HOLIDAY
+	Weather          AlertCause = gtfsrt.Alert_WEATHER
+	Maintenance      AlertCause = gtfsrt.Alert_MAINTENANCE
+	Construction     AlertCause = gtfsrt.Alert_CONSTRUCTION
+	PoliceActivity   AlertCause = gtfsrt.Alert_POLICE_ACTIVITY
+	MedicalEmergency AlertCause = gtfsrt.Alert_MEDICAL_EMERGENCY
+)
+
+type AlertEffect = gtfsrt.Alert_Effect
+
+const (
+	UnknownEffect      AlertEffect = gtfsrt.Alert_UNKNOWN_EFFECT
+	NoService          AlertEffect = gtfsrt.Alert_NO_SERVICE
+	ReducedService     AlertEffect = gtfsrt.Alert_REDUCED_SERVICE
+	SignificantDelays  AlertEffect = gtfsrt.Alert_SIGNIFICANT_DELAYS
+	Detour             AlertEffect = gtfsrt.Alert_DETOUR
+	AdditionalService  AlertEffect = gtfsrt.Alert_ADDITIONAL_SERVICE
+	ModifiedService    AlertEffect = gtfsrt.Alert_MODIFIED_SERVICE
+	OtherEffect        AlertEffect = gtfsrt.Alert_OTHER_EFFECT
+	StopMoved          AlertEffect = gtfsrt.Alert_STOP_MOVED
+	NoEffect           AlertEffect = gtfsrt.Alert_NO_EFFECT
+	AccessibilityIssue AlertEffect = gtfsrt.Alert_ACCESSIBILITY_ISSUE
+)
+
+type AlertActivePeriod struct {
+	StartsAt time.Time
+	EndsAt   time.Time
+}
+
+type AlertInformedEntity struct {
+	AgencyID    *string
+	RouteID     *string
+	RouteType   *RouteType
+	DirectionID *DirectionID
+	TripID      *TripID
+	StopID      *string
+}
+
+type AlertText struct {
+	Text     string
+	Language string
+}
+
 type ParseRealtimeOptions struct {
 	// The timezone to interpret date field.
 	//
 	// It can be nil, in which case UTC will used.
 	Timezone *time.Location
 
-	// Whether to use the New York City Transit extensions.
-	UseNyctExtension bool
-
-	// If true, trips that are unassigned and should be running will be skipped.
-	// This addresses a data bug in the NYCT feeds.
-	NyctFilterStaleUnassignedTrips bool
+	// The GTFS Realtime extension to use when parsing.
+	//
+	// This can be nil, in which case no extension is used.
+	Extension extensions.Extension
 }
 
 func (opts *ParseRealtimeOptions) timezoneOrUTC() *time.Location {
@@ -145,6 +208,9 @@ func (opts *ParseRealtimeOptions) timezoneOrUTC() *time.Location {
 }
 
 func ParseRealtime(content []byte, opts *ParseRealtimeOptions) (*Realtime, error) {
+	if opts.Extension == nil {
+		opts.Extension = extensions.NoExtension()
+	}
 	feedMessage := &gtfsrt.FeedMessage{}
 	if err := proto.Unmarshal(content, feedMessage); err != nil {
 		return nil, fmt.Errorf("failed to parse input as a GTFS Realtime message: %s", err)
@@ -155,22 +221,37 @@ func ParseRealtime(content []byte, opts *ParseRealtimeOptions) (*Realtime, error
 		result.CreatedAt = createdAt
 	}
 
+	shouldSkip := make([]bool, len(feedMessage.GetEntity()))
+	for i, entity := range feedMessage.Entity {
+		if tripUpdate := entity.GetTripUpdate(); tripUpdate != nil {
+			r := opts.Extension.UpdateTrip(tripUpdate, feedMessage.GetHeader().GetTimestamp())
+			shouldSkip[i] = r.ShouldSkip
+		} else if vehiclePosition := entity.GetVehicle(); vehiclePosition != nil {
+			opts.Extension.UpdateVehicle(vehiclePosition)
+		} else if alert := entity.Alert; alert != nil {
+			shouldSkip[i] = opts.Extension.UpdateAlert(entity.Id, alert)
+		}
+	}
+
 	tripsById := map[TripID]*Trip{}
 	vehiclesByID := map[VehicleID]*Vehicle{}
 	tripIDToVehicleID := map[TripID]VehicleID{}
 	vehicleIDToTripID := map[VehicleID]TripID{}
 	vehiclesWithNoID := []Vehicle{}
-	for _, entity := range feedMessage.Entity {
+	for i, entity := range feedMessage.Entity {
+		if shouldSkip[i] {
+			continue
+		}
 		var trip *Trip
 		var vehicle *Vehicle
 		var ok bool
 
 		if tripUpdate := entity.TripUpdate; tripUpdate != nil {
 			trip, vehicle, ok = parseTripUpdate(tripUpdate, opts, feedMessage.GetHeader().GetTimestamp())
-		} else if vehiclePosition := entity.Vehicle; vehicle != nil {
-			trip, vehicle, ok = parseVehicle(vehiclePosition, opts)
+		} else if vehiclePosition := entity.Vehicle; vehiclePosition != nil {
+			trip, vehicle, ok = parseVehicle(vehiclePosition, opts, feedMessage.GetHeader().GetTimestamp())
 		} else if alert := entity.Alert; alert != nil {
-			// TODO: parse alerts
+			result.Alerts = append(result.Alerts, parseAlert(entity.GetId(), alert, opts))
 			continue
 		} else {
 			continue
@@ -228,16 +309,8 @@ func parseTripUpdate(tripUpdate *gtfsrt.TripUpdate, opts *ParseRealtimeOptions, 
 	if tripUpdate.Trip == nil {
 		return nil, nil, false
 	}
-	var nyctIsAssigned bool
-	if opts.UseNyctExtension {
-		nyctIsAssigned = nyct.UpdateDescriptors(tripUpdate)
-		if opts.NyctFilterStaleUnassignedTrips && nyct.IsStaleUnassignedTrip(nyctIsAssigned, tripUpdate.StopTimeUpdate, feedCreatedAt) {
-			return nil, nil, false
-		}
-	}
 	trip := &Trip{
 		ID:                parseTripDescriptor(tripUpdate.Trip, opts),
-		NyctIsAssigned:    nyctIsAssigned,
 		IsEntityInMessage: true,
 	}
 	convertStopTimeEvent := func(stopTimeEvent *gtfsrt.TripUpdate_StopTimeEvent) *StopTimeEvent {
@@ -258,16 +331,12 @@ func parseTripUpdate(tripUpdate *gtfsrt.TripUpdate, opts *ParseRealtimeOptions, 
 		return &result
 	}
 	for _, stopTimeUpdate := range tripUpdate.StopTimeUpdate {
-		var nyctTrack *string
-		if opts.UseNyctExtension {
-			nyctTrack = nyct.GetTrack(stopTimeUpdate)
-		}
 		trip.StopTimeUpdates = append(trip.StopTimeUpdates, StopTimeUpdate{
 			StopSequence: stopTimeUpdate.StopSequence,
 			StopID:       stopTimeUpdate.StopId,
 			Arrival:      convertStopTimeEvent(stopTimeUpdate.Arrival),
 			Departure:    convertStopTimeEvent(stopTimeUpdate.Departure),
-			NyctTrack:    nyctTrack,
+			NyctTrack:    opts.Extension.GetTrack(stopTimeUpdate),
 		})
 	}
 	if tripUpdate.Vehicle == nil {
@@ -280,10 +349,7 @@ func parseTripUpdate(tripUpdate *gtfsrt.TripUpdate, opts *ParseRealtimeOptions, 
 	return trip, vehicle, true
 }
 
-func parseVehicle(vehiclePosition *gtfsrt.VehiclePosition, opts *ParseRealtimeOptions) (*Trip, *Vehicle, bool) {
-	if opts.UseNyctExtension {
-		nyct.UpdateDescriptors(vehiclePosition)
-	}
+func parseVehicle(vehiclePosition *gtfsrt.VehiclePosition, opts *ParseRealtimeOptions, feedCreatedAt uint64) (*Trip, *Vehicle, bool) {
 	vehicle := &Vehicle{
 		ID:                parseVehicleDescriptor(vehiclePosition.Vehicle, opts),
 		IsEntityInMessage: true,
@@ -380,4 +446,47 @@ func convertDirectionID(raw *uint32) DirectionID {
 		return DirectionIDFalse
 	}
 	return DirectionIDTrue
+}
+
+func parseAlert(ID string, alert *gtfsrt.Alert, opts *ParseRealtimeOptions) Alert {
+	var activePeriods []AlertActivePeriod
+	for _, entity := range alert.GetActivePeriod() {
+		activePeriods = append(activePeriods, AlertActivePeriod{
+			StartsAt: time.Unix(int64(entity.GetStart()), 0).In(opts.timezoneOrUTC()),
+			EndsAt:   time.Unix(int64(entity.GetEnd()), 0).In(opts.timezoneOrUTC()),
+		})
+	}
+	var informedEntites []AlertInformedEntity
+	for _, entity := range alert.GetInformedEntity() {
+		informedEntites = append(informedEntites, AlertInformedEntity{
+			AgencyID: entity.AgencyId,
+			RouteID:  entity.RouteId,
+			// TODO
+			// RouteType    *RouteType
+			// DirectionID *DirectionID
+			// TripID      *TripID
+			StopID: entity.StopId,
+		})
+	}
+	return Alert{
+		ID:               ID,
+		ActivePeriods:    activePeriods,
+		Cause:            alert.GetCause(),
+		Effect:           alert.GetEffect(),
+		InformedEntities: informedEntites,
+		Header:           buildAlertText(alert.GetHeaderText()),
+		Description:      buildAlertText(alert.GetDescriptionText()),
+		URL:              buildAlertText(alert.GetUrl()),
+	}
+}
+
+func buildAlertText(ts *gtfsrt.TranslatedString) []AlertText {
+	var texts []AlertText
+	for _, s := range ts.GetTranslation() {
+		texts = append(texts, AlertText{
+			Text:     s.GetText(),
+			Language: s.GetLanguage(),
+		})
+	}
+	return texts
 }

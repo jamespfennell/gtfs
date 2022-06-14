@@ -1,4 +1,4 @@
-package nyct_test
+package nycttrips_test
 
 import (
 	"fmt"
@@ -6,6 +6,8 @@ import (
 	"testing"
 
 	"github.com/jamespfennell/gtfs"
+	"github.com/jamespfennell/gtfs/extensions/nycttrips"
+	"github.com/jamespfennell/gtfs/internal/testutil"
 	gtfsrt "github.com/jamespfennell/gtfs/proto"
 	"google.golang.org/protobuf/proto"
 )
@@ -58,33 +60,23 @@ func TestGetTrack(t *testing.T) {
 					ActualTrack:    testCase.ActualTrack,
 				})
 			}
-			message := gtfsrt.FeedMessage{
-				Header: &gtfsrt.FeedHeader{
-					GtfsRealtimeVersion: ptr("2.0"),
-				},
-				Entity: []*gtfsrt.FeedEntity{
-					{
-						Id: ptr("1"),
-						TripUpdate: &gtfsrt.TripUpdate{
-							Trip: &gtfsrt.TripDescriptor{
-								TripId: ptr(tripID1),
-							},
-							StopTimeUpdate: []*gtfsrt.TripUpdate_StopTimeUpdate{&stopTimeUpdate},
+
+			entities := []*gtfsrt.FeedEntity{
+				{
+					Id: ptr("1"),
+					TripUpdate: &gtfsrt.TripUpdate{
+						Trip: &gtfsrt.TripDescriptor{
+							TripId: ptr(tripID1),
 						},
+						StopTimeUpdate: []*gtfsrt.TripUpdate_StopTimeUpdate{&stopTimeUpdate},
 					},
 				},
 			}
-			b, err := proto.Marshal(&message)
-			if err != nil {
-				t.Fatalf("Failed to marshal message: %s", err)
-			}
 
-			result, err := gtfs.ParseRealtime(b, &gtfs.ParseRealtimeOptions{
-				UseNyctExtension: true,
+			result := testutil.MustParse(t, nil, entities, &gtfs.ParseRealtimeOptions{
+				Extension: nycttrips.Extension(true),
 			})
-			if err != nil {
-				t.Errorf("unexpected error in ParseRealtime: %s", err)
-			}
+
 			expected := []gtfs.Trip{
 				{
 					ID: gtfs.TripID{
@@ -152,33 +144,26 @@ func TestFilterStaleUnassignedTrips(t *testing.T) {
 	}
 	for i, tc := range testCases {
 		t.Run(fmt.Sprintf("case_%d", i), func(t *testing.T) {
-			message := gtfsrt.FeedMessage{
-				Header: &gtfsrt.FeedHeader{
-					GtfsRealtimeVersion: ptr("2.0"),
-					Timestamp:           &feedTime,
-				},
-				Entity: []*gtfsrt.FeedEntity{
-					{
-						Id: ptr("1"),
-						TripUpdate: &gtfsrt.TripUpdate{
-							Trip:           &gtfsrt.TripDescriptor{},
-							StopTimeUpdate: []*gtfsrt.TripUpdate_StopTimeUpdate{tc.FirstStopTime},
-						},
+			tripDescriptor := &gtfsrt.TripDescriptor{}
+			proto.SetExtension(tripDescriptor, gtfsrt.E_NyctTripDescriptor, &gtfsrt.NyctTripDescriptor{})
+			entities := []*gtfsrt.FeedEntity{
+				{
+					Id: ptr("1"),
+					TripUpdate: &gtfsrt.TripUpdate{
+						Trip:           tripDescriptor,
+						StopTimeUpdate: []*gtfsrt.TripUpdate_StopTimeUpdate{tc.FirstStopTime},
 					},
 				},
 			}
-			b, err := proto.Marshal(&message)
-			if err != nil {
-				t.Fatalf("Failed to marshal message: %s", err)
+			header := &gtfsrt.FeedHeader{
+				GtfsRealtimeVersion: ptr("2.0"),
+				Timestamp:           &feedTime,
 			}
 
-			result, err := gtfs.ParseRealtime(b, &gtfs.ParseRealtimeOptions{
-				UseNyctExtension:               true,
-				NyctFilterStaleUnassignedTrips: true,
+			result := testutil.MustParse(t, header, entities, &gtfs.ParseRealtimeOptions{
+				Extension: nycttrips.Extension(true),
 			})
-			if err != nil {
-				t.Errorf("unexpected error in ParseRealtime: %s", err)
-			}
+
 			if len(result.Trips) != tc.ExpectedNumTrips {
 				t.Errorf("len(result.Trips)=%d, wanted %d", len(result.Trips), tc.ExpectedNumTrips)
 			}

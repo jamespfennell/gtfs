@@ -8,6 +8,8 @@ import (
 
 	"github.com/fatih/color"
 	"github.com/jamespfennell/gtfs"
+	"github.com/jamespfennell/gtfs/extensions/nyctalerts"
+	"github.com/jamespfennell/gtfs/extensions/nycttrips"
 	"github.com/urfave/cli/v2"
 )
 
@@ -45,9 +47,9 @@ func main() {
 						Aliases: []string{"v"},
 						Usage:   "print additional data about each trip and vehicle",
 					},
-					&cli.BoolFlag{
-						Name:  "nyct",
-						Usage: "use the New York City Transit GTFS realtime extension",
+					&cli.StringFlag{
+						Name:  "extension",
+						Usage: "GTFS realtime extension to use: nycttrips, nyctalerts",
 					},
 				},
 				ArgsUsage: "path",
@@ -63,8 +65,19 @@ func main() {
 					}
 
 					opts := gtfs.ParseRealtimeOptions{}
-					if ctx.Bool("nyct") {
-						opts.UseNyctExtension = true
+					switch ctx.String("extension") {
+					case "nycttrips":
+						opts.Extension = nycttrips.Extension(true)
+						americaNewYorkTimezone, err := time.LoadLocation("America/New_York")
+						if err == nil {
+							opts.Timezone = americaNewYorkTimezone
+						}
+					case "nyctalerts":
+						opts.Extension = nyctalerts.Extension(nyctalerts.ExtensionOpts{
+							ElevatorAlertsDeduplicationPolicy:   nyctalerts.DeduplicateInComplex,
+							ElevatorAlertsInformUsingStationIDs: true,
+							SkipTimetabledNoServiceAlerts:       true,
+						})
 						americaNewYorkTimezone, err := time.LoadLocation("America/New_York")
 						if err == nil {
 							opts.Timezone = americaNewYorkTimezone
@@ -78,6 +91,10 @@ func main() {
 					fmt.Printf("%d trips:\n", len(realtime.Trips))
 					for _, trip := range realtime.Trips {
 						fmt.Printf("- %s\n", formatTrip(trip, 2, ctx.Bool("verbose")))
+					}
+					fmt.Printf("%d alerts:\n", len(realtime.Alerts))
+					for _, alert := range realtime.Alerts {
+						fmt.Printf("- %s\n", formatAlert(alert, 2))
 					}
 					return nil
 				},
@@ -128,6 +145,32 @@ func formatTrip(trip gtfs.Trip, indent int, printStopTimes bool) string {
 		fmt.Fprintf(&b, "Num stop times: %d (show with -v)%s", len(trip.StopTimeUpdates), newLine)
 	}
 
+	return b.String()
+}
+
+func formatAlert(alert gtfs.Alert, indent int) string {
+	var header string
+	for _, message := range alert.Header {
+		if header == "" || len(message.Text) < len(header) {
+			header = message.Text
+		}
+	}
+	if len(header) > 100 {
+		header = header[:100] + "..."
+	}
+	var b strings.Builder
+	tc := color.New(color.FgCyan)
+	vc := color.New(color.FgMagenta)
+	// sc := color.New(color.FgGreen)
+	newLine := fmt.Sprintf("\n%*s", indent, "")
+	fmt.Fprintf(&b,
+		"AlertID %s  Cause %s  Effect %s  Header %s%s",
+		tc.Sprint(alert.ID),
+		tc.Sprint(alert.Cause),
+		tc.Sprint(alert.Effect),
+		vc.Sprint(header),
+		newLine,
+	)
 	return b.String()
 }
 

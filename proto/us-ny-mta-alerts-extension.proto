@@ -1,0 +1,126 @@
+
+// Copyright 2020 Metropolitan Transportation Authority
+//
+// Mercury extensions for the GTFS-realtime protocol.
+//
+// Source: https://github.com/OneBusAway/onebusaway-gtfs-realtime-api/blob/master/src/main/proto/com/google/transit/realtime/gtfs-realtime-service-status.proto
+syntax = "proto2";
+
+import "proto/gtfs-realtime.proto";
+
+option java_package = "com.google.transit.realtime";
+package transit_realtime;
+option go_package = "github.com/jamespfennell/gtfs/proto";
+
+// Mercury extensions for the Feed Header
+message MercuryFeedHeader {
+  // Version of the Mercury extensions
+  // The current version is 1.0
+  required string mercury_version = 1;
+}
+
+// The MTA unfortunately reusued the 1001 extention number for this alerts extension. So the alerts
+// proto file and trips proto file cannot be compiled together. To get around this we just comment
+// out this extention.
+//
+// extend FeedHeader {
+// optional MercuryFeedHeader mercury_feed_header = 1001;
+// }
+
+message MercuryStationAlternative {
+  required EntitySelector affected_entity = 1;
+  required TranslatedString notes = 2;
+}
+
+// Mercury extensions for the Feed Alert
+message MercuryAlert {
+  required uint64 created_at = 1;
+  required uint64 updated_at = 2;
+  required string alert_type = 3;
+
+  repeated MercuryStationAlternative station_alternative = 4;
+
+  repeated string service_plan_number = 5;
+  repeated string general_order_number = 6;
+
+  // A time interval, in seconds, indicating how long before each active period
+  // consumers should display this alert. A value of 3600 here, for example,
+  // suggests that this alert should be displayed 1 hour before each active
+  // period. Consumers may choose to ignore this recommendation and display (or
+  // not display) alerts based on their own logic if they so choose.
+  optional uint64 display_before_active = 7;
+
+  // A human-friendly string that summarizes all active periods for this Alert,
+  // i.e. "Sundays in May from 10:45pm to midnight"
+  optional TranslatedString human_readable_active_period = 8;
+
+  optional uint64 directionality = 9;
+  repeated EntitySelector affected_stations = 10;
+
+  optional TranslatedString screens_summary = 11;
+
+  optional bool no_affected_stations = 12;
+
+  // The ids of the planned work cloned from
+  optional string clone_id = 13;
+}
+
+extend transit_realtime.Alert {
+ optional MercuryAlert mercury_alert = 1001;
+}
+
+// Mercury extensions for the Feed Entity Selector
+message MercuryEntitySelector {
+
+  // What is the priority of the affected entity. Use to construct the entity sort_order.
+
+  enum Priority {
+    PRIORITY_NO_SCHEDULED_SERVICE = 1;
+    PRIORITY_NO_MIDDAY_SERVICE = 2;
+    PRIORITY_NO_OVERNIGHT_SERVICE = 3;
+    PRIORITY_NO_WEEKEND_SERVICE = 4;
+    PRIORITY_WEEKDAY_SCHEDULE = 5;
+    PRIORITY_WEEKEND_SCHEDULE = 6;
+    PRIORITY_SATURDAY_SCHEDULE = 7;
+    PRIORITY_SUNDAY_SCHEDULE = 8;
+    PRIORITY_EXTRA_SERVICE = 9;
+    PRIORITY_SPECIAL_SCHEDULE = 10;
+    PRIORITY_STATION_NOTICE = 11;
+    PRIORITY_SPECIAL_EVENT = 12;
+    PRIORITY_PLANNED_BOARDING_CHANGE = 13;
+    PRIORITY_BOARDING_CHANGE = 14;
+    PRIORITY_REDUCED_SERVICE = 15;
+    PRIORITY_PLANNED_WORK = 16;
+    PRIORITY_PLANNED_STATIONS_SKIPPED = 17;
+    PRIORITY_PLANNED_EXPRESS_TO_LOCAL = 18;
+    PRIORITY_SLOW_SPEEDS = 19;
+    PRIORITY_EXPECT_DELAYS = 20;
+    PRIORITY_PLANNED_LOCAL_TO_EXPRESS = 21;
+    PRIORITY_PLANNED_BUSES_DETOURED = 22;
+    PRIORITY_PLANNED_TRAINS_REROUTED = 23;
+    PRIORITY_PLANNED_SUBSTITUTE_BUSES = 24;
+    PRIORITY_PLANNED_PART_SUSPENDED = 25;
+    PRIORITY_PLANNED_MULTIPLE_CHANGES = 26;
+    PRIORITY_SOME_DELAYS = 27;
+    PRIORITY_STATIONS_SKIPPED = 28;
+    PRIORITY_EXPRESS_TO_LOCAL = 29;
+    PRIORITY_DELAYS = 30;
+    PRIORITY_SOME_REROUTES = 31;
+    PRIORITY_LOCAL_TO_EXPRESS = 32;
+    PRIORITY_BUSES_DETOURED = 33;
+    PRIORITY_SERVICE_CHANGE = 34;
+    PRIORITY_TRAINS_REROUTED = 35;
+    PRIORITY_SUBSTITUTE_BUSES = 36;
+    PRIORITY_PART_SUSPENDED = 37;
+    PRIORITY_MULTIPLE_CHANGES = 38;
+    PRIORITY_PLANNED_SUSPENDED = 39;
+    PRIORITY_SUSPENDED = 40;
+  }
+
+  // Format for sort_order is 'GTFS-ID:Priority', e.g. 'MTASBWY:G:16'
+  required string sort_order = 1;
+}
+
+extend transit_realtime.EntitySelector {
+ optional MercuryEntitySelector mercury_entity_selector = 1001;
+}
