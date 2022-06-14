@@ -136,93 +136,38 @@ type Alert struct {
 	URL              []AlertText
 }
 
-type AlertCause int32
+type AlertCause = gtfsrt.Alert_Cause
 
 const (
-	UnknownCause     AlertCause = 0
-	OtherCause       AlertCause = 1
-	TechnicalProblem AlertCause = 2
-	Strike           AlertCause = 3
-	Demonstration    AlertCause = 4
-	Accident         AlertCause = 5
-	Holiday          AlertCause = 6
-	Weather          AlertCause = 7
-	Maintenance      AlertCause = 8
-	Construction     AlertCause = 9
-	PoliceActivity   AlertCause = 10
-	MedicalEmergency AlertCause = 11
+	UnknownCause     AlertCause = gtfsrt.Alert_UNKNOWN_CAUSE
+	OtherCause       AlertCause = gtfsrt.Alert_OTHER_CAUSE
+	TechnicalProblem AlertCause = gtfsrt.Alert_TECHNICAL_PROBLEM
+	Strike           AlertCause = gtfsrt.Alert_STRIKE
+	Demonstration    AlertCause = gtfsrt.Alert_DEMONSTRATION
+	Accident         AlertCause = gtfsrt.Alert_ACCIDENT
+	Holiday          AlertCause = gtfsrt.Alert_HOLIDAY
+	Weather          AlertCause = gtfsrt.Alert_WEATHER
+	Maintenance      AlertCause = gtfsrt.Alert_MAINTENANCE
+	Construction     AlertCause = gtfsrt.Alert_CONSTRUCTION
+	PoliceActivity   AlertCause = gtfsrt.Alert_POLICE_ACTIVITY
+	MedicalEmergency AlertCause = gtfsrt.Alert_MEDICAL_EMERGENCY
 )
 
-func (c AlertCause) String() string {
-	switch c {
-	case OtherCause:
-		return "OTHER_CAUSE"
-	case TechnicalProblem:
-		return "TECHNICAL_PROBLEM"
-	case Strike:
-		return "STRIKE"
-	case Demonstration:
-		return "DEMONSTRATION"
-	case Accident:
-		return "ACCIDENT"
-	case Holiday:
-		return "HOLIDAY"
-	case Weather:
-		return "WEATHER"
-	case Maintenance:
-		return "MAINTENANCE"
-	case Construction:
-		return "CONSTRUCTION"
-	case PoliceActivity:
-		return "POLICE_ACTIVITY"
-	case MedicalEmergency:
-		return "MEDICAL_EMERGENCY"
-	}
-	return "UNKNOWN_CAUSE"
-}
-
-// TODO: just use a type alias to the Gtfs rt type?
-type AlertEffect int32
+type AlertEffect = gtfsrt.Alert_Effect
 
 const (
-	UnknownEffect      AlertEffect = 0
-	NoService          AlertEffect = 1
-	ReducedService     AlertEffect = 2
-	SignificantDelays  AlertEffect = 3
-	Detour             AlertEffect = 4
-	AdditionalService  AlertEffect = 5
-	ModifiedService    AlertEffect = 6
-	OtherEffect        AlertEffect = 7
-	StopMoved          AlertEffect = 8
-	NoEffect           AlertEffect = 9
-	AccessibilityIssue AlertEffect = 10
+	UnknownEffect      AlertEffect = gtfsrt.Alert_UNKNOWN_EFFECT
+	NoService          AlertEffect = gtfsrt.Alert_NO_SERVICE
+	ReducedService     AlertEffect = gtfsrt.Alert_REDUCED_SERVICE
+	SignificantDelays  AlertEffect = gtfsrt.Alert_SIGNIFICANT_DELAYS
+	Detour             AlertEffect = gtfsrt.Alert_DETOUR
+	AdditionalService  AlertEffect = gtfsrt.Alert_ADDITIONAL_SERVICE
+	ModifiedService    AlertEffect = gtfsrt.Alert_MODIFIED_SERVICE
+	OtherEffect        AlertEffect = gtfsrt.Alert_OTHER_EFFECT
+	StopMoved          AlertEffect = gtfsrt.Alert_STOP_MOVED
+	NoEffect           AlertEffect = gtfsrt.Alert_NO_EFFECT
+	AccessibilityIssue AlertEffect = gtfsrt.Alert_ACCESSIBILITY_ISSUE
 )
-
-func (e AlertEffect) String() string {
-	switch e {
-	case NoService:
-		return "NO_SERVICE"
-	case ReducedService:
-		return "REDUCED_SERVICE"
-	case SignificantDelays:
-		return "SIGNIFICANT_DELAYS"
-	case Detour:
-		return "DETOUR"
-	case AdditionalService:
-		return "ADDITIONAL_SERVICE"
-	case ModifiedService:
-		return "MODIFIED_SERVICE"
-	case OtherEffect:
-		return "OTHER_EFFECT"
-	case StopMoved:
-		return "STOP_MOVED"
-	case NoEffect:
-		return "NO_EFFECT"
-	case AccessibilityIssue:
-		return "ACCESSIBILITY_ISSUE"
-	}
-	return "UNKNOWN_EFFECT"
-}
 
 type AlertActivePeriod struct {
 	StartsAt time.Time
@@ -504,83 +449,30 @@ func convertDirectionID(raw *uint32) DirectionID {
 }
 
 func parseAlert(ID string, alert *gtfsrt.Alert, opts *ParseRealtimeOptions) Alert {
-	cause := UnknownCause
-	switch alert.GetCause() {
-	case gtfsrt.Alert_OTHER_CAUSE:
-		cause = OtherCause
-	case gtfsrt.Alert_TECHNICAL_PROBLEM:
-		cause = TechnicalProblem
-	case gtfsrt.Alert_STRIKE:
-		cause = Strike
-	case gtfsrt.Alert_DEMONSTRATION:
-		cause = Demonstration
-	case gtfsrt.Alert_ACCIDENT:
-		cause = Accident
-	case gtfsrt.Alert_HOLIDAY:
-		cause = Holiday
-	case gtfsrt.Alert_WEATHER:
-		cause = Weather
-	case gtfsrt.Alert_MAINTENANCE:
-		cause = Maintenance
-	case gtfsrt.Alert_CONSTRUCTION:
-		cause = Construction
-	case gtfsrt.Alert_POLICE_ACTIVITY:
-		cause = PoliceActivity
-	case gtfsrt.Alert_MEDICAL_EMERGENCY:
-		cause = MedicalEmergency
+	var activePeriods []AlertActivePeriod
+	for _, entity := range alert.GetActivePeriod() {
+		activePeriods = append(activePeriods, AlertActivePeriod{
+			StartsAt: time.Unix(int64(entity.GetStart()), 0).In(opts.timezoneOrUTC()),
+			EndsAt:   time.Unix(int64(entity.GetEnd()), 0).In(opts.timezoneOrUTC()),
+		})
 	}
-
-	effect := UnknownEffect
-	switch alert.GetEffect() {
-	case gtfsrt.Alert_NO_SERVICE:
-		effect = NoService
-	case gtfsrt.Alert_REDUCED_SERVICE:
-		effect = ReducedService
-	case gtfsrt.Alert_SIGNIFICANT_DELAYS:
-		effect = SignificantDelays
-	case gtfsrt.Alert_DETOUR:
-		effect = Detour
-	case gtfsrt.Alert_ADDITIONAL_SERVICE:
-		effect = AdditionalService
-	case gtfsrt.Alert_MODIFIED_SERVICE:
-		effect = ModifiedService
-	case gtfsrt.Alert_OTHER_EFFECT:
-		effect = OtherEffect
-	case gtfsrt.Alert_STOP_MOVED:
-		effect = StopMoved
-	case gtfsrt.Alert_ACCESSIBILITY_ISSUE:
-		effect = AccessibilityIssue
-	}
-
-	/*
-		header :=
-		languageToMessage := map[string]*AlertMessage{}
-		populateMessages(languageToMessage, alert.GetHeaderText(), func(am *AlertMessage) *string { return &am.Header })
-		populateMessages(languageToMessage, alert.GetDescriptionText(), func(am *AlertMessage) *string { return &am.Description })
-		populateMessages(languageToMessage, alert.GetUrl(), func(am *AlertMessage) *string { return &am.URL })
-		var messages []AlertMessage
-		for _, message := range languageToMessage {
-			messages = append(messages, *message)
-		}*/
-
-	fmt.Println("Adding", alert.GetInformedEntity())
 	var informedEntites []AlertInformedEntity
 	for _, entity := range alert.GetInformedEntity() {
 		informedEntites = append(informedEntites, AlertInformedEntity{
 			AgencyID: entity.AgencyId,
 			RouteID:  entity.RouteId,
 			// TODO
-			//RouteType    *RouteType
-			//DirectionID *DirectionID
-			//TripID      *TripID
+			// RouteType    *RouteType
+			// DirectionID *DirectionID
+			// TripID      *TripID
 			StopID: entity.StopId,
 		})
 	}
-
 	return Alert{
 		ID:               ID,
-		Cause:            cause,
-		Effect:           effect,
+		ActivePeriods:    activePeriods,
+		Cause:            alert.GetCause(),
+		Effect:           alert.GetEffect(),
 		InformedEntities: informedEntites,
 		Header:           buildAlertText(alert.GetHeaderText()),
 		Description:      buildAlertText(alert.GetDescriptionText()),

@@ -63,6 +63,111 @@ func TestSoloTrip(t *testing.T) {
 	}
 }
 
+func TestAlert(t *testing.T) {
+	start := uint64(100)
+	end := uint64(200)
+	cause := gtfsrt.Alert_CONSTRUCTION
+	effect := gtfsrt.Alert_SIGNIFICANT_DELAYS
+	entities := []*gtfsrt.FeedEntity{
+		{
+			Id: ptr("AlertID"),
+			Alert: &gtfsrt.Alert{
+				ActivePeriod: []*gtfsrt.TimeRange{
+					{
+						Start: &start,
+						End:   &end,
+					},
+				},
+				InformedEntity: []*gtfsrt.EntitySelector{
+					{
+						AgencyId: ptr("AgencyID"),
+					},
+					{
+						RouteId: ptr("RouteID"),
+					},
+					{
+						StopId: ptr("StopID"),
+					},
+				},
+				Cause:  &cause,
+				Effect: &effect,
+				Url: &gtfsrt.TranslatedString{
+					Translation: []*gtfsrt.TranslatedString_Translation{
+						{
+							Text:     ptr("UrlText"),
+							Language: ptr("UrlLanguage"),
+						},
+					},
+				},
+				HeaderText: &gtfsrt.TranslatedString{
+					Translation: []*gtfsrt.TranslatedString_Translation{
+						{
+							Text:     ptr("HeaderText"),
+							Language: ptr("HeaderLanguage"),
+						},
+					},
+				},
+				DescriptionText: &gtfsrt.TranslatedString{
+					Translation: []*gtfsrt.TranslatedString_Translation{
+						{
+							Text:     ptr("DescriptionText"),
+							Language: ptr("DescriptionLanguage"),
+						},
+					},
+				},
+				// TODO: other fields
+			},
+		},
+	}
+
+	wantAlert := gtfs.Alert{
+		ID: "AlertID",
+		ActivePeriods: []gtfs.AlertActivePeriod{
+			{
+				StartsAt: time.Unix(100, 0).UTC(),
+				EndsAt:   time.Unix(200, 0).UTC(),
+			},
+		},
+		InformedEntities: []gtfs.AlertInformedEntity{
+			{
+				AgencyID: ptr("AgencyID"),
+			},
+			{
+				RouteID: ptr("RouteID"),
+			},
+			{
+				StopID: ptr("StopID"),
+			},
+		},
+		Cause:  cause,
+		Effect: effect,
+		URL: []gtfs.AlertText{
+			{
+				Text:     "UrlText",
+				Language: "UrlLanguage",
+			},
+		},
+		Header: []gtfs.AlertText{
+			{
+				Text:     "HeaderText",
+				Language: "HeaderLanguage",
+			},
+		},
+		Description: []gtfs.AlertText{
+			{
+				Text:     "DescriptionText",
+				Language: "DescriptionLanguage",
+			},
+		},
+	}
+
+	result := testutil.MustParse(t, nil, entities, &gtfs.ParseRealtimeOptions{})
+
+	if !reflect.DeepEqual(result.Alerts, []gtfs.Alert{wantAlert}) {
+		t.Errorf("actual:\n%+v\n!= expected:\n%+v", result.Alerts, []gtfs.Alert{wantAlert})
+	}
+}
+
 func ptr(s string) *string {
 	return &s
 }

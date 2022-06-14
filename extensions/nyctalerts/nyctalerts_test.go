@@ -51,8 +51,9 @@ func TestMetadata(t *testing.T) {
 		t.Fatalf("failed to marshal metadata: %s", err)
 	}
 	wantAlert := gtfs.Alert{
-		ID:    "lmm:planned_work",
-		Cause: gtfs.Maintenance,
+		ID:     "lmm:planned_work",
+		Cause:  gtfs.Maintenance,
+		Effect: gtfs.UnknownEffect,
 		Description: []gtfs.AlertText{
 			{
 				Text:     string(b),
