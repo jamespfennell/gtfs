@@ -67,7 +67,9 @@ func main() {
 					opts := gtfs.ParseRealtimeOptions{}
 					switch ctx.String("extension") {
 					case "nycttrips":
-						opts.Extension = nycttrips.Extension(true)
+						opts.Extension = nycttrips.Extension(nycttrips.ExtensionOpts{
+							FilterStaleUnassignedTrips: true,
+						})
 						americaNewYorkTimezone, err := time.LoadLocation("America/New_York")
 						if err == nil {
 							opts.Timezone = americaNewYorkTimezone

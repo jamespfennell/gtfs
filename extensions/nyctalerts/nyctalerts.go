@@ -20,29 +20,29 @@ import (
 // deduplicating these alerts either by combining alerts for the station (A27N, A27S) or the same
 // station complex (A27N, A27S, E01N, E01S) into one. The value of this enum in the [ExtensionOpts] determines
 // which type of deduplication to perform. See the constants values of this enum for possible options.
-type ElevatorAlertsDeduplicationPolicy int8
+type ElevatorAlertsDeduplicationPolicy string
 
 const (
 	// Do not deduplicate any elevator alerts. This is the default.
-	NoDeduplication ElevatorAlertsDeduplicationPolicy = 0
+	NoDeduplication ElevatorAlertsDeduplicationPolicy = "NO_DEDUPLICATION"
 
 	// Deduplicate alerts for the same station. Remember that in the subway's GTFS static design a station
 	// is two platforms like the L train platforms at Union Square. To deduplicate across the whole
 	// physical station use [DeduplicateComplex] instead.
 	//
 	// With this option, the ID of the combined alert will be `<station_id>#<elevator_id>`.
-	DeduplicateInStation ElevatorAlertsDeduplicationPolicy = 1
+	DeduplicateInStation ElevatorAlertsDeduplicationPolicy = "DEDUPLICATE_IN_STATION"
 
 	// Deduplicate alerts for the same station complex.
 	//
 	// With this option, the ID of the combined alert will be `elevator:<elevator_id>`.
-	DeduplicateInComplex ElevatorAlertsDeduplicationPolicy = 2
+	DeduplicateInComplex ElevatorAlertsDeduplicationPolicy = "DEDUPLICATE_IN_COMPLEX"
 )
 
 // ExtensionOpts contains the options for the NYCT alerts extension.
 type ExtensionOpts struct {
 	// The deduplication policy to apply. See the enum type's documentation for guidance.
-	ElevatorAlertsDeduplicationPolicy ElevatorAlertsDeduplicationPolicy
+	ElevatorAlertsDeduplicationPolicy ElevatorAlertsDeduplicationPolicy `yaml:"elevatorAlertsDeduplicationPolicy"`
 
 	// The MTA's elevator alerts use the platform (e.g. L03N) for the affected entity. This makes
 	// sense in some cases because an elevator may only serve one platform if the station does not offer a transfer
@@ -51,30 +51,27 @@ type ExtensionOpts struct {
 	// In this case it makes sense to use the station ID A27 as the informed enttiy.
 	//
 	// If true, platform IDs are replaced by station IDs in the informed entities.
-	ElevatorAlertsInformUsingStationIDs bool
+	ElevatorAlertsInformUsingStationIDs bool `yaml:"elevatorAlertsInformUsingStationIDs"`
 
 	// When there are no trains running for a route due to the standard timetable (e.g., there are no C trains
 	// overnight), the MTA publishes an alert. Arguably this is not really an alert becuase this information is
 	// already in the timetable.
 	//
 	// If true, these alerts are skipped.
-	SkipTimetabledNoServiceAlerts bool
+	SkipTimetabledNoServiceAlerts bool `yaml:"skipTimetabledNoServiceAlerts"`
 
 	// The NYCT alerts extension contains many fields like "time alert created at" that don't map to fields in
 	// the standard GTFS realtime proto. If true, all of these fields are placed in a metadata struct of
 	// type [Metadata], serialized to a string, and then included in the GTFS realtime message as a description
 	// string with language set to [MetadataLanguage].
-	AddNyctMetadata bool
+	AddNyctMetadata bool `yaml:"addNyctMetadata"`
 }
 
 // Extension returns the NYCT alerts extension with the provided options applied.
 func Extension(opts ExtensionOpts) extensions.Extension {
 	return extension{
-		elevatorAlertsDeduplicationPolicy:   opts.ElevatorAlertsDeduplicationPolicy,
-		elevatorAlertsInformUsingStationIDs: opts.ElevatorAlertsInformUsingStationIDs,
-		elevatorAlerts:                      map[string]*gtfsrt.Alert{},
-		skipTimetabledNoServiceAlerts:       opts.SkipTimetabledNoServiceAlerts,
-		addNyctMetadata:                     opts.AddNyctMetadata,
+		opts:           opts,
+		elevatorAlerts: map[string]*gtfsrt.Alert{},
 	}
 }
 
@@ -100,14 +97,8 @@ type InformedEntityMetadata struct {
 }
 
 type extension struct {
-	// TODO: just add opts?
-	elevatorAlertsDeduplicationPolicy   ElevatorAlertsDeduplicationPolicy
-	elevatorAlertsInformUsingStationIDs bool
-	elevatorAlerts                      map[string]*gtfsrt.Alert
-
-	skipTimetabledNoServiceAlerts bool
-	addNyctMetadata               bool
-
+	opts           ExtensionOpts
+	elevatorAlerts map[string]*gtfsrt.Alert
 	extensions.NoExtensionImpl
 }
 
@@ -181,11 +172,11 @@ func (e extension) UpdateAlert(ID *string, alert *gtfsrt.Alert) bool {
 		if effect, ok := priortyToEffect[priority]; ok {
 			alert.Effect = &effect
 		}
-		if e.skipTimetabledNoServiceAlerts && timetabledNoServicePriorities[priority] {
+		if e.opts.SkipTimetabledNoServiceAlerts && timetabledNoServicePriorities[priority] {
 			return true
 		}
 	}
-	if e.addNyctMetadata {
+	if e.opts.AddNyctMetadata {
 		if text, ok := buildMetadata(alert); ok {
 			language := MetadataLanguage
 			descriptionText := alert.GetDescriptionText()
@@ -261,14 +252,14 @@ func (e extension) updateElevatorAlert(ID *string, alert *gtfsrt.Alert) bool {
 	elevatorID := match[3]
 
 	var informedEntityID string
-	if e.elevatorAlertsInformUsingStationIDs {
+	if e.opts.ElevatorAlertsInformUsingStationIDs {
 		informedEntityID = stationID
 	} else {
 		informedEntityID = platformID
 	}
 
 	var newID string
-	switch e.elevatorAlertsDeduplicationPolicy {
+	switch e.opts.ElevatorAlertsDeduplicationPolicy {
 	case DeduplicateInStation:
 		newID = fmt.Sprintf("%s#EL%s", stationID, elevatorID)
 	case DeduplicateInComplex:

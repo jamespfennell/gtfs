@@ -74,7 +74,9 @@ func TestGetTrack(t *testing.T) {
 			}
 
 			result := testutil.MustParse(t, nil, entities, &gtfs.ParseRealtimeOptions{
-				Extension: nycttrips.Extension(true),
+				Extension: nycttrips.Extension(nycttrips.ExtensionOpts{
+					FilterStaleUnassignedTrips: true,
+				}),
 			})
 
 			expected := []gtfs.Trip{
@@ -161,7 +163,9 @@ func TestFilterStaleUnassignedTrips(t *testing.T) {
 			}
 
 			result := testutil.MustParse(t, header, entities, &gtfs.ParseRealtimeOptions{
-				Extension: nycttrips.Extension(true),
+				Extension: nycttrips.Extension(nycttrips.ExtensionOpts{
+					FilterStaleUnassignedTrips: true,
+				}),
 			})
 
 			if len(result.Trips) != tc.ExpectedNumTrips {

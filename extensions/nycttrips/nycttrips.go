@@ -13,15 +13,21 @@ import (
 
 var TripIDRegex *regexp.Regexp = regexp.MustCompile(`^([0-9]{6})_([[:alnum:]]{1,2})..([SN])([[:alnum:]]*)$`)
 
+// ExtensionOpts contains the options for the NYCT trips extension.
+type ExtensionOpts struct {
+	// Filter out trips which are scheduled to run in the past but have no assigned trip and haven't started.
+	FilterStaleUnassignedTrips bool `yaml:"filterStaleUnassignedTrips"`
+}
+
 // Extension returns the NYCT trips extension
-func Extension(filterStaleUnassignedTrips bool) extensions.Extension {
+func Extension(opts ExtensionOpts) extensions.Extension {
 	return extension{
-		filterStaleUnassignedTrips: filterStaleUnassignedTrips,
+		opts: opts,
 	}
 }
 
 type extension struct {
-	filterStaleUnassignedTrips bool
+	opts ExtensionOpts
 
 	extensions.NoExtensionImpl
 }
@@ -30,7 +36,7 @@ func (e extension) UpdateTrip(trip *gtfsrt.TripUpdate, feedCreatedAt uint64) ext
 	// TODO: ensure that if isAssigned is true then the vehicle is populated, otherwise populate it somehow
 	isAssigned := e.updateTripOrVehicle(trip)
 	shouldSkip := proto.HasExtension(trip.GetTrip(), gtfsrt.E_NyctTripDescriptor) &&
-		e.filterStaleUnassignedTrips && isStaleUnassignedTrip(isAssigned, trip.StopTimeUpdate, feedCreatedAt)
+		e.opts.FilterStaleUnassignedTrips && isStaleUnassignedTrip(isAssigned, trip.StopTimeUpdate, feedCreatedAt)
 	return extensions.UpdateTripResult{
 		ShouldSkip:     shouldSkip,
 		NyctIsAssigned: isAssigned,
