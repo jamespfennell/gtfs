@@ -16,25 +16,12 @@ import (
 
 // Static contains the parsed content for a single GTFS static message.
 type Static struct {
-	Agencies        []Agency
-	Routes          []Route
-	Stops           []Stop
-	Transfers       []Transfer
-	GroupedStations []Stop
-	Services        []Service
-	Trips           []ScheduledTrip
-}
-
-// AllStops returns a slice of pointers to all stops - both regular stops, and grouped stations.
-func (s *Static) AllStops() []*Stop {
-	var result []*Stop
-	for i := range s.Stops {
-		result = append(result, &s.Stops[i])
-	}
-	for i := range s.GroupedStations {
-		result = append(result, &s.GroupedStations[i])
-	}
-	return result
+	Agencies  []Agency
+	Routes    []Route
+	Stops     []Stop
+	Transfers []Transfer
+	Services  []Service
+	Trips     []ScheduledTrip
 }
 
 // Agency corresponds to a single row in the agency.txt file.
@@ -206,12 +193,11 @@ func (stop *Stop) Root() *Stop {
 type StopType int32
 
 const (
-	Platform       StopType = 0
-	Station        StopType = 1
-	EntanceOrExit  StopType = 2
-	GenericNode    StopType = 3
-	BoardingArea   StopType = 4
-	GroupedStation StopType = 1001
+	Platform      StopType = 0
+	Station       StopType = 1
+	EntanceOrExit StopType = 2
+	GenericNode   StopType = 3
+	BoardingArea  StopType = 4
 )
 
 func NewStopType(i int) (StopType, bool) {
@@ -245,8 +231,6 @@ func (t StopType) String() string {
 		return "GENERIC_NODE"
 	case BoardingArea:
 		return "BOARDING_AREA"
-	case GroupedStation:
-		return "GROUPED_STATION"
 	}
 	return "UNKNOWN"
 }
@@ -386,34 +370,7 @@ func (s scheduledStopTimeSorter) Swap(i, j int) {
 	s[i], s[j] = s[j], s[i]
 }
 
-type ParseStaticOptions struct {
-	TransfersOptions TransfersOptions
-}
-
-type TransfersOptions struct {
-	Strategy   TransfersStrategy
-	Exceptions []struct {
-		FromStopId string
-		ToStopId   string
-		Strategy   TransfersStrategy
-	}
-}
-
-func (opts TransfersOptions) FindStrategy(fromStopId, toStopId string) TransfersStrategy {
-	for _, exception := range opts.Exceptions {
-		if fromStopId == exception.FromStopId && toStopId == exception.ToStopId {
-			return exception.Strategy
-		}
-	}
-	return opts.Strategy
-}
-
-type TransfersStrategy int32
-
-const (
-	TransfersStrategyDefault = 0
-	GroupStations            = 1
-)
+type ParseStaticOptions struct{}
 
 // ParseStatic parses the content as a GTFS static feed.
 func ParseStatic(content []byte, opts ParseStaticOptions) (*Static, error) {
@@ -461,7 +418,7 @@ func ParseStatic(content []byte, opts ParseStaticOptions) (*Static, error) {
 		{
 			File: "transfers.txt",
 			Action: func(file *csv.File) {
-				result.Transfers, result.GroupedStations = parseTransfers(file, opts.TransfersOptions, result.Stops)
+				result.Transfers = parseTransfers(file, result.Stops)
 			},
 		},
 		{
@@ -713,12 +670,11 @@ func parseWheelchairBoarding(raw *string) WheelchairBoarding {
 	return t
 }
 
-func parseTransfers(csv *csv.File, opts TransfersOptions, stops []Stop) ([]Transfer, []Stop) {
+func parseTransfers(csv *csv.File, stops []Stop) []Transfer {
 	stopIdToStop := map[string]*Stop{}
 	for i := range stops {
 		stopIdToStop[stops[i].Id] = &stops[i]
 	}
-	groupingMap := map[string]map[string]bool{}
 	var transfers []Transfer
 	iter := csv.Iter()
 	for iter.Next() {
@@ -741,20 +697,14 @@ func parseTransfers(csv *csv.File, opts TransfersOptions, stops []Stop) ([]Trans
 			// log.Printf("Skipping transfer between the same stop %q", fromStop.Id)
 			continue
 		}
-		switch opts.FindStrategy(fromStop.Id, toStop.Id) {
-		case GroupStations:
-			updateGroupingMap(groupingMap, fromStop.Root().Id, toStop.Root().Id)
-		default:
-			transfer := Transfer{
-				From:            fromStop,
-				To:              toStop,
-				Type:            parseTransferType(row.GetOptional("transfer_type")),
-				MinTransferTime: parseInt32(row.GetOptional("min_transfer_time")),
-			}
-			transfers = append(transfers, transfer)
-		}
+		transfers = append(transfers, Transfer{
+			From:            fromStop,
+			To:              toStop,
+			Type:            parseTransferType(row.GetOptional("transfer_type")),
+			MinTransferTime: parseInt32(row.GetOptional("min_transfer_time")),
+		})
 	}
-	return transfers, buildGroupedStations(stopIdToStop, groupingMap)
+	return transfers
 }
 
 func parseTransferType(raw *string) TransferType {
@@ -776,51 +726,6 @@ func parseInt32(raw *string) *int32 {
 	}
 	i32 := int32(i)
 	return &i32
-}
-
-func updateGroupingMap(m map[string]map[string]bool, stopId1, stopId2 string) {
-	allStops := map[string]bool{
-		stopId1: true,
-		stopId2: true,
-	}
-	for stopId := range m[stopId1] {
-		allStops[stopId] = true
-	}
-	for stopId := range m[stopId2] {
-		allStops[stopId] = true
-	}
-	for stopId := range allStops {
-		m[stopId] = allStops
-	}
-}
-
-func buildGroupedStations(existingStops map[string]*Stop, groupingMap map[string]map[string]bool) []Stop {
-	var newStops []Stop
-	var children []map[string]bool
-	newStopIds := map[string]bool{}
-	for _, stopIdsSet := range groupingMap {
-		var stopIds []string
-		for stopId := range stopIdsSet {
-			stopIds = append(stopIds, stopId)
-		}
-		sort.Strings(stopIds)
-		newStopId := strings.Join(stopIds, "-")
-		if _, alreadyCreated := newStopIds[newStopId]; alreadyCreated {
-			continue
-		}
-		newStopIds[newStopId] = true
-		children = append(children, stopIdsSet)
-		newStops = append(newStops, Stop{
-			Id:   newStopId,
-			Type: GroupedStation,
-		})
-	}
-	for i, childStopIds := range children {
-		for childStopId := range childStopIds {
-			existingStops[childStopId].Parent = &newStops[i]
-		}
-	}
-	return newStops
 }
 
 func parseCalendar(csv *csv.File, m map[string]Service, timezone *time.Location) {

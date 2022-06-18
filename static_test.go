@@ -270,31 +270,6 @@ func TestParse(t *testing.T) {
 			},
 		},
 		{
-			desc: "grouped station",
-			content: newZipBuilder().add(
-				"stops.txt",
-				"stop_id,parent_station\na,b\nb,\nc,",
-			).add(
-				"transfers.txt",
-				"from_stop_id,to_stop_id,transfer_type,min_transfer_time\na,c,2,300",
-			).build(),
-			opts: ParseStaticOptions{
-				TransfersOptions: TransfersOptions{
-					Strategy: GroupStations,
-				},
-			},
-			expected: &Static{
-				Stops: []Stop{
-					{Id: "a", Parent: &Stop{Id: "b", Parent: &Stop{Id: "b-c", Type: GroupedStation}}},
-					{Id: "b", Parent: &Stop{Id: "b-c", Type: GroupedStation}},
-					{Id: "c", Parent: &Stop{Id: "b-c", Type: GroupedStation}},
-				},
-				GroupedStations: []Stop{
-					{Id: "b-c", Type: GroupedStation},
-				},
-			},
-		},
-		{
 			desc: "calendar.txt",
 			content: newZipBuilder().add(
 				"calendar.txt",
