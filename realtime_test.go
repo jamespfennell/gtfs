@@ -65,7 +65,9 @@ func TestSoloTrip(t *testing.T) {
 
 func TestAlert(t *testing.T) {
 	start := uint64(100)
+	startT := time.Unix(100, 0).UTC()
 	end := uint64(200)
+	endT := time.Unix(200, 0).UTC()
 	cause := gtfsrt.Alert_CONSTRUCTION
 	effect := gtfsrt.Alert_SIGNIFICANT_DELAYS
 	entities := []*gtfsrt.FeedEntity{
@@ -124,8 +126,8 @@ func TestAlert(t *testing.T) {
 		ID: "AlertID",
 		ActivePeriods: []gtfs.AlertActivePeriod{
 			{
-				StartsAt: time.Unix(100, 0).UTC(),
-				EndsAt:   time.Unix(200, 0).UTC(),
+				StartsAt: &startT,
+				EndsAt:   &endT,
 			},
 		},
 		InformedEntities: []gtfs.AlertInformedEntity{

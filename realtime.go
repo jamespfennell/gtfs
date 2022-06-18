@@ -170,8 +170,8 @@ const (
 )
 
 type AlertActivePeriod struct {
-	StartsAt time.Time
-	EndsAt   time.Time
+	StartsAt *time.Time
+	EndsAt   *time.Time
 }
 
 type AlertInformedEntity struct {
@@ -452,8 +452,8 @@ func parseAlert(ID string, alert *gtfsrt.Alert, opts *ParseRealtimeOptions) Aler
 	var activePeriods []AlertActivePeriod
 	for _, entity := range alert.GetActivePeriod() {
 		activePeriods = append(activePeriods, AlertActivePeriod{
-			StartsAt: time.Unix(int64(entity.GetStart()), 0).In(opts.timezoneOrUTC()),
-			EndsAt:   time.Unix(int64(entity.GetEnd()), 0).In(opts.timezoneOrUTC()),
+			StartsAt: convertOptionalTimestamp(entity.Start, opts.timezoneOrUTC()),
+			EndsAt:   convertOptionalTimestamp(entity.End, opts.timezoneOrUTC()),
 		})
 	}
 	var informedEntites []AlertInformedEntity
@@ -489,4 +489,12 @@ func buildAlertText(ts *gtfsrt.TranslatedString) []AlertText {
 		})
 	}
 	return texts
+}
+
+func convertOptionalTimestamp(in *uint64, timezone *time.Location) *time.Time {
+	if in == nil {
+		return nil
+	}
+	out := time.Unix(int64(*in), 0).In(timezone)
+	return &out
 }
