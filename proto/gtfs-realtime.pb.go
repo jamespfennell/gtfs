@@ -1556,13 +1556,13 @@ func (x *Position) GetSpeed() float32 {
 
 // A descriptor that identifies an instance of a GTFS trip, or all instances of
 // a trip along a route.
-// - To specify a single trip instance, the trip_id (and if necessary,
-//   start_time) is set. If route_id is also set, then it should be same as one
-//   that the given trip corresponds to.
-// - To specify all the trips along a given route, only the route_id should be
-//   set. Note that if the trip_id is not known, then stop sequence ids in
-//   TripUpdate are not sufficient, and stop_ids must be provided as well. In
-//   addition, absolute arrival/departure times must be provided.
+//   - To specify a single trip instance, the trip_id (and if necessary,
+//     start_time) is set. If route_id is also set, then it should be same as one
+//     that the given trip corresponds to.
+//   - To specify all the trips along a given route, only the route_id should be
+//     set. Note that if the trip_id is not known, then stop sequence ids in
+//     TripUpdate are not sufficient, and stop_ids must be provided as well. In
+//     addition, absolute arrival/departure times must be provided.
 type TripDescriptor struct {
 	state           protoimpl.MessageState
 	sizeCache       protoimpl.SizeCache
@@ -1854,12 +1854,12 @@ func (x *EntitySelector) GetDirectionId() uint32 {
 // text or a URL.
 // One of the strings from a message will be picked up. The resolution proceeds
 // as follows:
-// 1. If the UI language matches the language code of a translation,
-//    the first matching translation is picked.
-// 2. If a default UI language (e.g., English) matches the language code of a
-//    translation, the first matching translation is picked.
-// 3. If some translation has an unspecified language code, that translation is
-//    picked.
+//  1. If the UI language matches the language code of a translation,
+//     the first matching translation is picked.
+//  2. If a default UI language (e.g., English) matches the language code of a
+//     translation, the first matching translation is picked.
+//  3. If some translation has an unspecified language code, that translation is
+//     picked.
 type TranslatedString struct {
 	state           protoimpl.MessageState
 	sizeCache       protoimpl.SizeCache
@@ -1912,12 +1912,12 @@ func (x *TranslatedString) GetTranslation() []*TranslatedString_Translation {
 // Timing information for a single predicted event (either arrival or
 // departure).
 // Timing consists of delay and/or estimated time, and uncertainty.
-// - delay should be used when the prediction is given relative to some
-//   existing schedule in GTFS.
-// - time should be given whether there is a predicted schedule or not. If
-//   both time and delay are specified, time will take precedence
-//   (although normally, time, if given for a scheduled trip, should be
-//   equal to scheduled time in GTFS + delay).
+//   - delay should be used when the prediction is given relative to some
+//     existing schedule in GTFS.
+//   - time should be given whether there is a predicted schedule or not. If
+//     both time and delay are specified, time will take precedence
+//     (although normally, time, if given for a scheduled trip, should be
+//     equal to scheduled time in GTFS + delay).
 //
 // Uncertainty applies equally to both time and delay.
 // The uncertainty roughly specifies the expected error in true delay (but

@@ -17,6 +17,13 @@ var TripIDRegex *regexp.Regexp = regexp.MustCompile(`^([0-9]{6})_([[:alnum:]]{1,
 type ExtensionOpts struct {
 	// Filter out trips which are scheduled to run in the past but have no assigned trip and haven't started.
 	FilterStaleUnassignedTrips bool `yaml:"filterStaleUnassignedTrips"`
+
+	// The raw MTA data has a bug in which the M train platforms are reported incorrectly for stations
+	// in Williamsburg and Bushwick that the M shares with the J train. In the raw data, M trains going towards
+	// the Williamsburg bridge stop at M11N, but J trains going towards the bridge stop at M11S. By default
+	// this extension fixes these platforms for the M train, so M11N becomes M11S. This fix can be disabled
+	// by setting this option to true.
+	PreserveMTrainPlatformsInBushwick bool `yaml:"preserveMTrainPlatformsInBushwick"`
 }
 
 // Extension returns the NYCT trips extension
@@ -33,6 +40,9 @@ type extension struct {
 }
 
 func (e extension) UpdateTrip(trip *gtfsrt.TripUpdate, feedCreatedAt uint64) extensions.UpdateTripResult {
+	if !e.opts.PreserveMTrainPlatformsInBushwick {
+		fixMTrainPlatformsInBushwick(trip)
+	}
 	// TODO: ensure that if isAssigned is true then the vehicle is populated, otherwise populate it somehow
 	isAssigned := e.updateTripOrVehicle(trip)
 	shouldSkip := proto.HasExtension(trip.GetTrip(), gtfsrt.E_NyctTripDescriptor) &&
@@ -94,6 +104,38 @@ func setVehicleDescriptor(entity tripOrVehicle, vehicleDesc *gtfsrt.VehicleDescr
 		t.Vehicle = vehicleDesc
 	case *gtfsrt.VehiclePosition:
 		t.Vehicle = vehicleDesc
+	}
+}
+
+func fixMTrainPlatformsInBushwick(trip *gtfsrt.TripUpdate) {
+	if trip.GetTrip().GetRouteId() != "M" {
+		return
+	}
+	buggyStationIDs := map[string]bool{
+		"M11": true,
+		"M12": true,
+		"M13": true,
+		"M14": true,
+		"M16": true,
+		"M18": true,
+	}
+	for _, stopTimeUpdate := range trip.GetStopTimeUpdate() {
+		if stopTimeUpdate == nil {
+			continue
+		}
+		stopID := stopTimeUpdate.GetStopId()
+		if len(stopID) != 4 {
+			continue
+		}
+		if !buggyStationIDs[stopID[:3]] {
+			continue
+		}
+		newDirection := 'N'
+		if stopID[3] == 'N' {
+			newDirection = 'S'
+		}
+		newStopID := stopID[:3] + string(newDirection)
+		stopTimeUpdate.StopId = &newStopID
 	}
 }
 

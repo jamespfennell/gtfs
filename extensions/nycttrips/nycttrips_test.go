@@ -175,6 +175,86 @@ func TestFilterStaleUnassignedTrips(t *testing.T) {
 	}
 }
 
+func TestFixMTrainPlatformsInBushwick(t *testing.T) {
+	testCases := []struct {
+		Name         string
+		FlagValue    bool
+		RouteID      string
+		InputStopIDs []string
+		WantStopIDs  []string
+	}{
+		{
+			Name:         "Not the M train",
+			RouteID:      "J",
+			InputStopIDs: []string{"M18N", "M19N"},
+			WantStopIDs:  []string{"M18N", "M19N"},
+		},
+		{
+			Name:         "Northbound M train",
+			RouteID:      "M",
+			InputStopIDs: []string{"M18N", "M19N"},
+			WantStopIDs:  []string{"M18S", "M19N"},
+		},
+		{
+			Name:         "Southbound M train",
+			RouteID:      "M",
+			InputStopIDs: []string{"M18S", "M19S"},
+			WantStopIDs:  []string{"M18N", "M19S"},
+		},
+		{
+			Name:         "Gracefully handle invalid stop IDs",
+			RouteID:      "M",
+			InputStopIDs: []string{"invalidStopID", "i"},
+			WantStopIDs:  []string{"invalidStopID", "i"},
+		},
+		{
+			Name:         "Fix disabled",
+			FlagValue:    true,
+			RouteID:      "M",
+			InputStopIDs: []string{"M18S", "M19S"},
+			WantStopIDs:  []string{"M18S", "M19S"},
+		},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.Name, func(t *testing.T) {
+			var stopTimeUpdates []*gtfsrt.TripUpdate_StopTimeUpdate
+			for _, stopID := range tc.InputStopIDs {
+				stopID := stopID
+				stopTimeUpdates = append(stopTimeUpdates, &gtfsrt.TripUpdate_StopTimeUpdate{
+					StopId: &stopID,
+				})
+			}
+			entities := []*gtfsrt.FeedEntity{
+				{
+					Id: ptr("1"),
+					TripUpdate: &gtfsrt.TripUpdate{
+						Trip: &gtfsrt.TripDescriptor{
+							TripId:  ptr(tripID1),
+							RouteId: ptr(tc.RouteID),
+						},
+						StopTimeUpdate: stopTimeUpdates,
+					},
+				},
+			}
+			result := testutil.MustParse(t, nil, entities, &gtfs.ParseRealtimeOptions{
+				Extension: nycttrips.Extension(nycttrips.ExtensionOpts{
+					PreserveMTrainPlatformsInBushwick: tc.FlagValue,
+				}),
+			})
+			if len(result.Trips) != 1 {
+				t.Fatalf("len(result.Trips)=%d, wanted 1", len(result.Trips))
+			}
+			var gotStopIDs []string
+			for _, stopTimeUpdate := range result.Trips[0].StopTimeUpdates {
+				gotStopIDs = append(gotStopIDs, *stopTimeUpdate.StopID)
+			}
+			if !reflect.DeepEqual(gotStopIDs, tc.WantStopIDs) {
+				t.Errorf("stopIDs got = %v, want = %v", gotStopIDs, tc.WantStopIDs)
+			}
+		})
+	}
+}
+
 func ptr(s string) *string {
 	return &s
 }
