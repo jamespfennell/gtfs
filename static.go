@@ -418,8 +418,11 @@ func ParseStatic(content []byte, opts ParseStaticOptions) (*Static, error) {
 		{
 			File: "transfers.txt",
 			Action: func(file *csv.File) {
-				result.Transfers = parseTransfers(file, result.Stops)
+				if file != nil {
+					result.Transfers = parseTransfers(file, result.Stops)
+				}
 			},
+			Optional: true,
 		},
 		{
 			File: "calendar.txt",
@@ -639,7 +642,7 @@ func parseFloat64(raw *string) *float64 {
 	if raw == nil {
 		return nil
 	}
-	f, err := strconv.ParseFloat(*raw, 64)
+	f, err := strconv.ParseFloat(strings.TrimSpace(*raw), 64)
 	if err != nil {
 		return nil
 	}
