@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/jamespfennell/gtfs/csv"
 )
@@ -458,55 +459,69 @@ func ParseStatic(content []byte, opts ParseStaticOptions) (*Static, error) {
 			},
 		},
 	} {
-		file, err := readCsvFile(fileNameToFile, table.File)
-		// TODO: not quite right; we need to make sure the error is a missing file error
-		if err != nil && !table.Optional {
-			return nil, err
+		zipFile := fileNameToFile[table.File]
+		if zipFile == nil {
+			if table.Optional {
+				// TODO: this is no janky
+				table.Action(nil)
+				continue
+			}
+			return nil, fmt.Errorf("no %q file in GTFS static feed", table.File)
+		}
+		file, err := readCsvFile(zipFile)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read %q: %w", table.File, err)
 		}
 		table.Action(file)
+		if err := file.Close(); err != nil {
+			return nil, fmt.Errorf("failed to read %q: %w", table.File, err)
+		}
 	}
 
 	return result, nil
 }
 
-func readCsvFile(fileNameToFile map[string]*zip.File, fileName string) (*csv.File, error) {
-	zipFile := fileNameToFile[fileName]
-	if zipFile == nil {
-		return nil, fmt.Errorf("no %q file in GTFS static feed", fileName)
-	}
+func readCsvFile(zipFile *zip.File) (*csv.File, error) {
 	content, err := zipFile.Open()
 	if err != nil {
 		return nil, err
 	}
-	defer content.Close()
-	// start := time.Now()
 	f, err := csv.New(content)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse %q: %w", fileName, err)
+		return nil, err
 	}
-	// fmt.Println("Read", fileName, time.Since(start))
 	return f, nil
 }
 
 func parseAgencies(csv *csv.File) []Agency {
+	idColumn := csv.OptionalColumn("agency_id")
+	nameColumn := csv.RequiredColumn("agency_name")
+	urlColumn := csv.RequiredColumn("agency_url")
+	timezoneColumn := csv.RequiredColumn("agency_timezone")
+	languageColumn := csv.OptionalColumn("agency_lang")
+	phoneColumn := csv.OptionalColumn("agency_phone")
+	fareUrlColumn := csv.OptionalColumn("agency_fare_url")
+	emailColumn := csv.OptionalColumn("agency_email")
+
+	if err := csv.MissingRequiredColumns(); err != nil {
+		fmt.Println(err)
+		return nil
+	}
+
 	var agencies []Agency
-	iter := csv.Iter()
-	for iter.Next() {
-		row := iter.Get()
+	for csv.NextRow() {
 		agency := Agency{
-			Id: row.GetOrCalculate("agency_id", func() string {
-				// TODO: support specifying the agency ID in the GTFS static parser settings
-				return fmt.Sprintf("%s_id", row.Get("agency_name"))
-			}),
-			Name:     row.Get("agency_name"),
-			Url:      row.Get("agency_url"),
-			Timezone: row.Get("agency_timezone"),
-			Language: row.GetOptional("agency_lang"),
-			Phone:    row.GetOptional("agency_phone"),
-			FareUrl:  row.GetOptional("agency_fare_url"),
-			Email:    row.GetOptional("agency_email"),
+			// TODO: support specifying the default agency ID in the GTFS static parser settings
+			Id:       idColumn.ReadOr(fmt.Sprintf("%s_id", nameColumn.Read())),
+			Name:     nameColumn.Read(),
+			Url:      urlColumn.Read(),
+			Timezone: timezoneColumn.Read(),
+			Language: languageColumn.Read(),
+			Phone:    phoneColumn.Read(),
+			FareUrl:  fareUrlColumn.Read(),
+			Email:    emailColumn.Read(),
 		}
-		if missingKeys := row.MissingKeys(); len(missingKeys) > 0 {
+		if missingKeys := csv.MissingRowKeys(); len(missingKeys) > 0 {
 			log.Printf("Skipping agency %+v because of missing keys %s", agency, missingKeys)
 			continue
 		}
@@ -516,21 +531,38 @@ func parseAgencies(csv *csv.File) []Agency {
 }
 
 func parseRoutes(csv *csv.File, agencies []Agency) []Route {
+	idColumn := csv.RequiredColumn("route_id")
+	agencyIDColumn := csv.OptionalColumn("agency_id")
+	colorColumn := csv.OptionalColumn("route_color")
+	textColorColumn := csv.OptionalColumn("route_text_color")
+	shortNameColumn := csv.OptionalColumn("route_short_name")
+	longNameColumn := csv.OptionalColumn("route_long_name")
+	descriptionColumn := csv.OptionalColumn("route_desc")
+	routeTypeColumn := csv.RequiredColumn("route_type")
+	urlColumn := csv.OptionalColumn("route_url")
+	sortOrderColumn := csv.OptionalColumn("route_sort_order")
+	continuousPickupColumn := csv.OptionalColumn("continuous_pickup")
+	continuousDropOffColumn := csv.OptionalColumn("continuous_dropoff")
+
+	if err := csv.MissingRequiredColumns(); err != nil {
+		fmt.Println(err)
+		return nil
+	}
+
 	var routes []Route
-	iter := csv.Iter()
-	for iter.Next() {
-		row := iter.Get()
-		agencyId := row.GetOptional("agency_id")
+	for csv.NextRow() {
+		routeID := idColumn.Read()
+		agencyID := agencyIDColumn.Read()
 		var agency *Agency
-		if agencyId != nil {
+		if agencyID != nil {
 			for i := range agencies {
-				if agencies[i].Id == *agencyId {
+				if agencies[i].Id == *agencyID {
 					agency = &agencies[i]
 					break
 				}
 			}
 			if agency == nil {
-				log.Printf("skipping route %s: no match for agency ID %s", row.Get("route_id"), *agencyId)
+				log.Printf("skipping route %s: no match for agency ID %s", routeID, *agencyID)
 				continue
 			}
 		} else if len(agencies) == 1 {
@@ -538,24 +570,24 @@ func parseRoutes(csv *csv.File, agencies []Agency) []Route {
 			// which case the route's agency is the unique agency in the feed.
 			agency = &agencies[0]
 		} else {
-			log.Printf("skipping route %s: no agency ID provided but no unique agency", row.Get("route_id"))
+			log.Printf("skipping route %s: no agency ID provided but no unique agency", routeID)
 			continue
 		}
 		route := Route{
-			Id:                row.Get("route_id"),
+			Id:                routeID,
 			Agency:            agency,
-			Color:             row.GetOr("route_color", "FFFFFF"),
-			TextColor:         row.GetOr("route_text_color", "000000"),
-			ShortName:         row.GetOptional("route_short_name"),
-			LongName:          row.GetOptional("route_long_name"),
-			Description:       row.GetOptional("route_desc"),
-			Type:              parseRouteType(row.Get("route_type")),
-			Url:               row.GetOptional("route_url"),
-			SortOrder:         parseRouteSortOrder(row.GetOptional("route_sort_order")),
-			ContinuousPickup:  parseRoutePolicy(row.GetOptional("continuous_pickup")),
-			ContinuousDropOff: parseRoutePolicy(row.GetOptional("continuous_dropoff")),
+			Color:             colorColumn.ReadOr("FFFFFF"),
+			TextColor:         textColorColumn.ReadOr("000000"),
+			ShortName:         shortNameColumn.Read(),
+			LongName:          longNameColumn.Read(),
+			Description:       descriptionColumn.Read(),
+			Type:              parseRouteType(routeTypeColumn.Read()),
+			Url:               urlColumn.Read(),
+			SortOrder:         parseRouteSortOrder(sortOrderColumn.Read()),
+			ContinuousPickup:  parseRoutePolicy(continuousPickupColumn.Read()),
+			ContinuousDropOff: parseRoutePolicy(continuousDropOffColumn.Read()),
 		}
-		if missingKeys := row.MissingKeys(); len(missingKeys) > 0 {
+		if missingKeys := csv.MissingRowKeys(); len(missingKeys) > 0 {
 			log.Printf("Skipping route %+v because of missing keys %s", route, missingKeys)
 			continue
 		}
@@ -597,33 +629,49 @@ func parseRoutePolicy(raw *string) RoutePolicy {
 }
 
 func parseStops(csv *csv.File) []Stop {
+	idColumn := csv.RequiredColumn("stop_id")
+	codeColumn := csv.OptionalColumn("stop_code")
+	nameColumn := csv.OptionalColumn("stop_name")
+	descriptionColumn := csv.OptionalColumn("stop_desc")
+	zoneIdColumn := csv.OptionalColumn("zone_id")
+	longitudeColumn := csv.OptionalColumn("stop_lon")
+	latitudeColumn := csv.OptionalColumn("stop_lat")
+	urlColumn := csv.OptionalColumn("stop_url")
+	typeColumn := csv.OptionalColumn("location_type")
+	timezoneColumn := csv.OptionalColumn("stop_timezone")
+	wheelchairBoardingColumn := csv.OptionalColumn("wheelchair_boarding")
+	platformCodeColumn := csv.OptionalColumn("platform_code")
+	parentStationColumn := csv.OptionalColumn("parent_station")
+
+	if err := csv.MissingRequiredColumns(); err != nil {
+		fmt.Println(err)
+		return nil
+	}
+
 	var stops []Stop
 	stopIdToIndex := map[string]int{}
 	stopIdToParent := map[string]string{}
-	iter := csv.Iter()
-	for iter.Next() {
-		row := iter.Get()
+	for csv.NextRow() {
 		stop := Stop{
-			Id:                 row.Get("stop_id"),
-			Code:               row.GetOptional("stop_code"),
-			Name:               row.GetOptional("stop_name"),
-			Description:        row.GetOptional("stop_desc"),
-			ZoneId:             row.GetOptional("zone_id"),
-			Longitude:          parseFloat64(row.GetOptional("stop_lon")),
-			Latitude:           parseFloat64(row.GetOptional("stop_lat")),
-			Url:                row.GetOptional("stop_url"),
-			Type:               parseStopType(row.GetOptional("location_type")),
-			Timezone:           row.GetOptional("stop_timezone"),
-			WheelchairBoarding: parseWheelchairBoarding(row.GetOptional("wheelchair_boarding")),
-			PlatformCode:       row.GetOptional("platform_code"),
+			Id:                 idColumn.Read(),
+			Code:               codeColumn.Read(),
+			Name:               nameColumn.Read(),
+			Description:        descriptionColumn.Read(),
+			ZoneId:             zoneIdColumn.Read(),
+			Longitude:          parseFloat64(longitudeColumn.Read()),
+			Latitude:           parseFloat64(latitudeColumn.Read()),
+			Url:                urlColumn.Read(),
+			Type:               parseStopType(typeColumn.Read()),
+			Timezone:           timezoneColumn.Read(),
+			WheelchairBoarding: parseWheelchairBoarding(wheelchairBoardingColumn.Read()),
+			PlatformCode:       platformCodeColumn.Read(),
 		}
-		if missingKeys := row.MissingKeys(); len(missingKeys) > 0 {
+		if missingKeys := csv.MissingRowKeys(); len(missingKeys) > 0 {
 			log.Printf("Skipping stop %+v because of missing keys %s", stop, missingKeys)
 			continue
 		}
 		stopIdToIndex[stop.Id] = len(stops)
-		parentStopId := row.GetOptional("parent_station")
-		if parentStopId != nil {
+		if parentStopId := parentStationColumn.Read(); parentStopId != nil {
 			stopIdToParent[stop.Id] = *parentStopId
 		}
 		stops = append(stops, stop)
@@ -674,26 +722,36 @@ func parseWheelchairBoarding(raw *string) WheelchairBoarding {
 }
 
 func parseTransfers(csv *csv.File, stops []Stop) []Transfer {
+	fromStopIDColumn := csv.RequiredColumn("from_stop_id")
+	toStopIDColumn := csv.RequiredColumn("to_stop_id")
+	typeColumn := csv.OptionalColumn("transfer_type")
+	transferTimeColumn := csv.OptionalColumn("min_transfer_time")
+
+	if err := csv.MissingRequiredColumns(); err != nil {
+		fmt.Println(err)
+		return nil
+	}
+
 	stopIdToStop := map[string]*Stop{}
 	for i := range stops {
 		stopIdToStop[stops[i].Id] = &stops[i]
 	}
 	var transfers []Transfer
-	iter := csv.Iter()
-	for iter.Next() {
-		row := iter.Get()
-		fromStop, fromStopOk := stopIdToStop[row.Get("from_stop_id")]
-		toStop, toStopOk := stopIdToStop[row.Get("to_stop_id")]
-		if missingKeys := row.MissingKeys(); len(missingKeys) > 0 {
+	for csv.NextRow() {
+		fromStopID := fromStopIDColumn.Read()
+		toStopID := toStopIDColumn.Read()
+		if missingKeys := csv.MissingRowKeys(); len(missingKeys) > 0 {
 			log.Printf("Skipping transfer because of missing keys %s", missingKeys)
 			continue
 		}
+		fromStop, fromStopOk := stopIdToStop[fromStopID]
+		toStop, toStopOk := stopIdToStop[toStopID]
 		if !fromStopOk {
-			log.Printf("Skipping transfer because from_stop_id %q is invalid", row.Get("from_stop_id"))
+			log.Printf("Skipping transfer because from_stop_id %q is invalid", fromStopID)
 			continue
 		}
 		if !toStopOk {
-			log.Printf("Skipping transfer because to_stop_id %q is invalid", row.Get("to_stop_id"))
+			log.Printf("Skipping transfer because to_stop_id %q is invalid", toStopID)
 			continue
 		}
 		if fromStop.Id == toStop.Id {
@@ -703,8 +761,8 @@ func parseTransfers(csv *csv.File, stops []Stop) []Transfer {
 		transfers = append(transfers, Transfer{
 			From:            fromStop,
 			To:              toStop,
-			Type:            parseTransferType(row.GetOptional("transfer_type")),
-			MinTransferTime: parseInt32(row.GetOptional("min_transfer_time")),
+			Type:            parseTransferType(typeColumn.Read()),
+			MinTransferTime: parseInt32(transferTimeColumn.Read()),
 		})
 	}
 	return transfers
@@ -731,34 +789,53 @@ func parseInt32(raw *string) *int32 {
 	return &i32
 }
 
-func parseCalendar(csv *csv.File, m map[string]Service, timezone *time.Location) {
+func parseCalendar(f *csv.File, m map[string]Service, timezone *time.Location) {
+	startDateColumn := f.RequiredColumn("start_date")
+	endDateColumn := f.RequiredColumn("end_date")
+	serviceIDColumn := f.RequiredColumn("service_id")
+	var dayColumns [7]csv.RequiredColumn
+	for i, days := range []string{
+		"monday",
+		"tuesday",
+		"wednesday",
+		"thursday",
+		"friday",
+		"saturday",
+		"sunday",
+	} {
+		dayColumns[i] = f.RequiredColumn(days)
+	}
+
+	if err := f.MissingRequiredColumns(); err != nil {
+		fmt.Println(err)
+		return
+	}
+
 	parseBool := func(s string) bool {
 		return s == "1"
 	}
-	iter := csv.Iter()
-	for iter.Next() {
-		row := iter.Get()
-		startDate, err := parseTime(row.Get("start_date"), timezone)
+	for f.NextRow() {
+		startDate, err := parseTime(startDateColumn.Read(), timezone)
 		if err != nil {
 			continue
 		}
-		endDate, err := parseTime(row.Get("end_date"), timezone)
+		endDate, err := parseTime(endDateColumn.Read(), timezone)
 		if err != nil {
 			continue
 		}
 		service := Service{
-			Id:        row.Get("service_id"),
-			Monday:    parseBool(row.Get("monday")),
-			Tuesday:   parseBool(row.Get("tuesday")),
-			Wednesday: parseBool(row.Get("wednesday")),
-			Thursday:  parseBool(row.Get("thursday")),
-			Friday:    parseBool(row.Get("friday")),
-			Saturday:  parseBool(row.Get("saturday")),
-			Sunday:    parseBool(row.Get("sunday")),
+			Id:        serviceIDColumn.Read(),
+			Monday:    parseBool(dayColumns[0].Read()),
+			Tuesday:   parseBool(dayColumns[1].Read()),
+			Wednesday: parseBool(dayColumns[2].Read()),
+			Thursday:  parseBool(dayColumns[3].Read()),
+			Friday:    parseBool(dayColumns[4].Read()),
+			Saturday:  parseBool(dayColumns[5].Read()),
+			Sunday:    parseBool(dayColumns[6].Read()),
 			StartDate: startDate,
 			EndDate:   endDate,
 		}
-		if missingKeys := row.MissingKeys(); len(missingKeys) > 0 {
+		if missingKeys := f.MissingRowKeys(); len(missingKeys) > 0 {
 			log.Printf("Skipping calendar because of missing keys %s", missingKeys)
 			continue
 		}
@@ -767,16 +844,23 @@ func parseCalendar(csv *csv.File, m map[string]Service, timezone *time.Location)
 }
 
 func parseCalendarDates(csv *csv.File, m map[string]Service, timezone *time.Location) {
-	iter := csv.Iter()
-	for iter.Next() {
-		row := iter.Get()
-		serviceId := row.Get("service_id")
-		date, err := parseTime(row.Get("date"), timezone)
+	serviceIDColumn := csv.RequiredColumn("service_id")
+	dateColumn := csv.RequiredColumn("date")
+	exceptionTypeColumn := csv.RequiredColumn("exception_type")
+
+	if err := csv.MissingRequiredColumns(); err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	for csv.NextRow() {
+		serviceId := serviceIDColumn.Read()
+		date, err := parseTime(dateColumn.Read(), timezone)
 		if err != nil {
 			continue
 		}
-		exceptionType := row.Get("exception_type")
-		if missingKeys := row.MissingKeys(); len(missingKeys) > 0 {
+		exceptionType := exceptionTypeColumn.Read()
+		if missingKeys := csv.MissingRowKeys(); len(missingKeys) > 0 {
 			log.Printf("Skipping calendar because of missing keys %s", missingKeys)
 			continue
 		}
@@ -810,6 +894,20 @@ func parseTime(s string, timezone *time.Location) (time.Time, error) {
 }
 
 func parseScheduledTrips(csv *csv.File, routes []Route, services []Service) []ScheduledTrip {
+	routeIDColumn := csv.RequiredColumn("route_id")
+	serviceIDColumn := csv.RequiredColumn("service_id")
+	tripIDColumn := csv.RequiredColumn("trip_id")
+	tripHeadsignColumn := csv.OptionalColumn("trip_headsign")
+	tripShortNameColumn := csv.OptionalColumn("trip_short_name")
+	directionIDColumn := csv.OptionalColumn("direction_id")
+	wheelchairAccessibleColumn := csv.OptionalColumn("wheelchair_accessible")
+	bikesAllowedColumn := csv.OptionalColumn("bikes_allowed")
+
+	if err := csv.MissingRequiredColumns(); err != nil {
+		fmt.Println(err)
+		return nil
+	}
+
 	idToService := map[string]*Service{}
 	for i := range services {
 		idToService[services[i].Id] = &services[i]
@@ -819,20 +917,18 @@ func parseScheduledTrips(csv *csv.File, routes []Route, services []Service) []Sc
 		idToRoute[routes[i].Id] = &routes[i]
 	}
 	var trips []ScheduledTrip
-	iter := csv.Iter()
-	for iter.Next() {
-		row := iter.Get()
+	for csv.NextRow() {
 		trip := ScheduledTrip{
-			Route:                idToRoute[row.Get("route_id")],
-			Service:              idToService[row.Get("service_id")],
-			ID:                   row.Get("trip_id"),
-			Headsign:             row.GetOptional("trip_headsign"),
-			ShortName:            row.GetOptional("trip_short_name"),
-			DirectionId:          parseOptionalBool(row.GetOptional("direction_id"), map[string]bool{"0": false, "1": true}),
-			WheelchairAccessible: parseOptionalBool(row.GetOptional("wheelchair_accessible"), map[string]bool{"1": true, "2": false}),
-			BikesAllowed:         parseOptionalBool(row.GetOptional("bikes_allowed"), map[string]bool{"1": true, "2": false}),
+			Route:                idToRoute[routeIDColumn.Read()],
+			Service:              idToService[serviceIDColumn.Read()],
+			ID:                   tripIDColumn.Read(),
+			Headsign:             tripHeadsignColumn.Read(),
+			ShortName:            tripShortNameColumn.Read(),
+			DirectionId:          parseOptionalBool(directionIDColumn.Read(), "1", "0"),
+			WheelchairAccessible: parseOptionalBool(wheelchairAccessibleColumn.Read(), "1", "2"),
+			BikesAllowed:         parseOptionalBool(bikesAllowedColumn.Read(), "1", "2"),
 		}
-		if missingKeys := row.MissingKeys(); len(missingKeys) > 0 {
+		if missingKeys := csv.MissingRowKeys(); len(missingKeys) > 0 {
 			log.Printf("Skipping trip because of missing keys %s", missingKeys)
 			continue
 		}
@@ -847,17 +943,34 @@ func parseScheduledTrips(csv *csv.File, routes []Route, services []Service) []Sc
 	return trips
 }
 
-func parseOptionalBool(s *string, m map[string]bool) *bool {
+func parseOptionalBool(s *string, trueVal, falseVal string) *bool {
 	if s == nil {
 		return nil
 	}
-	if b, ok := m[*s]; ok {
+	switch *s {
+	case trueVal:
+		b := true
 		return &b
+	case falseVal:
+		b := false
+		return &b
+	default:
+		return nil
 	}
-	return nil
 }
 
 func parseScheduledStopTimes(csv *csv.File, stops []Stop, trips []ScheduledTrip) {
+	stopIDColumn := csv.RequiredColumn("stop_id")
+	stopSequenceKey := csv.RequiredColumn("stop_sequence")
+	tripIDColumn := csv.RequiredColumn("trip_id")
+	arrivalTimeColumn := csv.OptionalColumn("arrival_time")
+	departureTimeColumn := csv.OptionalColumn("departure_time")
+	stopHeadsignColumn := csv.OptionalColumn("stop_headsign")
+	if err := csv.MissingRequiredColumns(); err != nil {
+		fmt.Println(err)
+		return
+	}
+
 	idToStop := map[string]*Stop{}
 	for i := range stops {
 		idToStop[stops[i].Id] = &stops[i]
@@ -866,11 +979,11 @@ func parseScheduledStopTimes(csv *csv.File, stops []Stop, trips []ScheduledTrip)
 	for i := range trips {
 		idToTrip[trips[i].ID] = &trips[i]
 	}
-	iter := csv.Iter()
-	for iter.Next() {
-		row := iter.Get()
-		arrival, arrivalOk := parseStopTimeDuration(row.GetOptional("arrival_time"))
-		departure, departueOk := parseStopTimeDuration(row.GetOptional("departure_time"))
+	var currentTrip *ScheduledTrip
+	var currentTripID string
+	for csv.NextRow() {
+		arrival, arrivalOk := parseStopTimeDuration(arrivalTimeColumn.Read())
+		departure, departueOk := parseStopTimeDuration(departureTimeColumn.Read())
 		if !arrivalOk && !departueOk {
 			continue
 		}
@@ -880,29 +993,37 @@ func parseScheduledStopTimes(csv *csv.File, stops []Stop, trips []ScheduledTrip)
 		if !arrivalOk {
 			departure = arrival
 		}
-		stopSequence, err := strconv.Atoi(row.Get("stop_sequence"))
+		stopSequence, err := strconv.Atoi(stopSequenceKey.Read())
 		if err != nil {
 			continue
 		}
 		stopTime := ScheduledStopTime{
-			Stop:          idToStop[row.Get("stop_id")],
-			Headsign:      row.GetOptional("stop_headsign"),
+			Stop:          idToStop[stopIDColumn.Read()],
+			Headsign:      stopHeadsignColumn.Read(),
 			ArrivalTime:   arrival,
 			StopSequence:  stopSequence,
 			DepartureTime: departure,
 		}
-		trip := idToTrip[row.Get("trip_id")]
-		if missingKeys := row.MissingKeys(); len(missingKeys) > 0 {
+		tripID := tripIDColumn.Read()
+		if currentTrip == nil || currentTripID != tripID {
+			thisTrip := idToTrip[tripID]
+			if currentTrip != nil && cap(thisTrip.StopTimes) == 0 {
+				thisTrip.StopTimes = make([]ScheduledStopTime, 0, len(currentTrip.StopTimes))
+			}
+			currentTrip = thisTrip
+			currentTripID = tripID
+		}
+		if missingKeys := csv.MissingRowKeys(); len(missingKeys) > 0 {
 			log.Printf("Skipping stop time because of missing keys %s", missingKeys)
 			continue
 		}
 		if stopTime.Stop == nil {
 			continue
 		}
-		if trip == nil {
+		if currentTrip == nil {
 			continue
 		}
-		trip.StopTimes = append(trip.StopTimes, stopTime)
+		currentTrip.StopTimes = append(currentTrip.StopTimes, stopTime)
 	}
 	for _, trip := range idToTrip {
 		SortScheduledStopTimes(trip.StopTimes)
@@ -913,21 +1034,24 @@ func parseStopTimeDuration(s *string) (time.Duration, bool) {
 	if s == nil {
 		return 0, false
 	}
-	pieces := strings.Split(*s, ":")
-	if len(pieces) != 3 {
-		return 0, false
+	var pieces [3]int
+	var i int
+	for _, c := range *s {
+		if '0' <= c && c <= '9' {
+			pieces[i] = 10*pieces[i] + int(c-'0')
+		} else if c == ':' {
+			i++
+			if i > 2 {
+				return 0, false
+			}
+		} else if unicode.IsSpace(c) {
+			continue
+		} else {
+			return 0, false
+		}
 	}
-	hours, err := strconv.Atoi(pieces[0])
-	if err != nil {
-		return 0, false
-	}
-	minutes, err := strconv.Atoi(pieces[1])
-	if err != nil {
-		return 0, false
-	}
-	seconds, err := strconv.Atoi(pieces[2])
-	if err != nil {
-		return 0, false
-	}
+	hours := pieces[0]
+	minutes := pieces[1]
+	seconds := pieces[2]
 	return time.Duration((hours*60+minutes)*60+seconds) * time.Second, true
 }

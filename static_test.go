@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"io"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 )
@@ -166,8 +167,9 @@ func TestParse(t *testing.T) {
 			content: newZipBuilder().add(
 				"stops.txt",
 				"stop_id,stop_code,stop_name,stop_desc,zone_id,stop_lon,stop_lat,"+
-					"stop_url,location_type,stop_timezone,wheelchair_boarding,platform_code\n"+
-					"a,b,c,d,e,1.5,2.5,f,1,g,1,h",
+					"stop_url,location_type,stop_timezone,wheelchair_boarding,platform_code",
+				"a,b,c,d,e,1.5,2.5,f,1,g,1,h",
+				"i,j,k,l,m,1.5,2.5,n,1,o,1,p",
 			).build(),
 			expected: &Static{
 				Stops: []Stop{
@@ -184,6 +186,20 @@ func TestParse(t *testing.T) {
 						Timezone:           ptr("g"),
 						WheelchairBoarding: Possible,
 						PlatformCode:       ptr("h"),
+					},
+					{
+						Id:                 "i",
+						Code:               ptr("j"),
+						Name:               ptr("k"),
+						Description:        ptr("l"),
+						ZoneId:             ptr("m"),
+						Longitude:          floatPtr(1.5),
+						Latitude:           floatPtr(2.5),
+						Url:                ptr("n"),
+						Type:               Station,
+						Timezone:           ptr("o"),
+						WheelchairBoarding: Possible,
+						PlatformCode:       ptr("p"),
 					},
 				},
 			},
@@ -419,12 +435,12 @@ func newZipBuilder() *zipBuilder {
 	).add(
 		"trips.txt", "route_id,service_id,trip_id",
 	).add(
-		"stop_times.txt", "stop_id,trip_id",
+		"stop_times.txt", "stop_id,trip_id,stop_sequence",
 	)
 }
 
-func (z *zipBuilder) add(fileName, fileContent string) *zipBuilder {
-	z.m[fileName] = fileContent
+func (z *zipBuilder) add(fileName string, fileContent ...string) *zipBuilder {
+	z.m[fileName] = strings.Join(fileContent, "\n")
 	return z
 }
 
