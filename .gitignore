@@ -15,5 +15,7 @@
 # vendor/
 gtfs
 google_transit.zip
-
-
+tmp
+pprof
+*pb.gz
+profiler
