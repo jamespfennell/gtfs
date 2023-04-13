@@ -462,8 +462,8 @@ func (z *zipBuilder) build() []byte {
 	return b.Bytes()
 }
 
-func ptr(s string) *string {
-	return &s
+func ptr[T any](t T) *T {
+	return &t
 }
 
 func intPtr(i int32) *int32 {
