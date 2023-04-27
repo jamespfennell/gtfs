@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"hash"
+	"time"
 )
 
 // Hash calculates a hash of a trip using the provided hash function.
@@ -54,12 +55,7 @@ func (h *hasher) trip(t *Trip) {
 			if event == nil {
 				continue
 			}
-			var up *int64
-			if event.Time != nil {
-				u := event.Time.Unix()
-				up = &u
-			}
-			hashNumberPtr(h, up)
+			h.timePtr(event.Time)
 			var dp *int64
 			if event.Delay != nil {
 				d := int64(*event.Delay)
@@ -74,10 +70,29 @@ func (h *hasher) trip(t *Trip) {
 func (h *hasher) vehicle(v *Vehicle) {
 	h.number(v.ID == nil)
 	if v.ID != nil {
-		h.string(v.ID.ID)
-		h.string(v.ID.Label)
-		h.string(v.ID.LicencePlate)
+		h.stringPtr(v.ID.ID)
+		h.stringPtr(v.ID.Label)
+		h.stringPtr(v.ID.LicencePlate)
 	}
+	h.number(v.Trip == nil)
+	if v.Trip != nil {
+		h.trip(v.Trip)
+	}
+	h.number(v.Position == nil)
+	if v.Position != nil {
+		hashNumberPtr(h, v.Position.Latitude)
+		hashNumberPtr(h, v.Position.Longitude)
+		hashNumberPtr(h, v.Position.Bearing)
+		hashNumberPtr(h, v.Position.Odometer)
+		hashNumberPtr(h, v.Position.Speed)
+	}
+	hashNumberPtr(h, v.CurrentStopSequence)
+	h.stringPtr(v.StopID)
+	hashNumberPtr(h, v.CurrentStatus)
+	h.timePtr(v.Timestamp)
+	h.number(v.CongestionLevel)
+	hashNumberPtr(h, v.OccupancyStatus)
+	hashNumberPtr(h, v.OccupancyPercentage)
 }
 
 func (h *hasher) string(s string) {
@@ -105,4 +120,13 @@ func (h *hasher) number(a any) {
 	if err != nil {
 		panic(fmt.Sprintf("failed to hash %T", a))
 	}
+}
+
+func (h *hasher) timePtr(t *time.Time) {
+	var up *int64
+	if t != nil {
+		u := t.Unix()
+		up = &u
+	}
+	hashNumberPtr(h, up)
 }

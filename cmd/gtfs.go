@@ -95,6 +95,10 @@ func main() {
 					for _, alert := range realtime.Alerts {
 						fmt.Printf("- %s\n", formatAlert(alert, 2))
 					}
+					fmt.Printf("%d vehicles:\n", len(realtime.Vehicles))
+					for _, vehicle := range realtime.Vehicles {
+						fmt.Printf("- %s\n", formatVehicle(vehicle, 2))
+					}
 					return nil
 				},
 			},
@@ -173,6 +177,66 @@ func formatAlert(alert gtfs.Alert, indent int) string {
 	return b.String()
 }
 
+func formatVehicle(vehicle gtfs.Vehicle, indent int) string {
+	var b strings.Builder
+	tc := color.New(color.FgCyan)
+	vc := color.New(color.FgMagenta)
+	sc := color.New(color.FgGreen)
+	newLine := fmt.Sprintf("\n%*s", indent, "")
+	fmt.Fprintf(&b,
+		"VehicleID %s  Label %s  LicencePlate %s%s",
+		tc.Sprint(vehicle.ID.ID),
+		tc.Sprint(vehicle.ID.Label),
+		tc.Sprint(vehicle.ID.LicencePlate),
+		newLine,
+	)
+	if vehicle.Trip != nil {
+		fmt.Fprintf(&b, "Trip: ID %s%s", vc.Sprint(vehicle.Trip.ID), newLine)
+	} else {
+		fmt.Fprintf(&b, "Trip: <none>%s", newLine)
+	}
+
+	if vehicle.Position != nil {
+		fmt.Fprintf(&b,
+			"Position: Lat %s  Lon %s  Bearing %s  Odometer %s  Speed %s%s",
+			sc.Sprint(unPtrF(vehicle.Position.Latitude)),
+			sc.Sprint(unPtrF(vehicle.Position.Longitude)),
+			sc.Sprint(unPtrF(vehicle.Position.Bearing)),
+			sc.Sprint(unPtrF64(vehicle.Position.Odometer)),
+			sc.Sprint(unPtrF(vehicle.Position.Speed)),
+			newLine,
+		)
+	} else {
+		fmt.Fprintf(&b, "Position: <none>%s", newLine)
+	}
+
+	fmt.Fprintf(&b, "CurrentStopSequence: %s%s", sc.Sprint(unPtrI(vehicle.CurrentStopSequence)), newLine)
+	fmt.Fprintf(&b, "StopID: %s%s", sc.Sprint(unPtr(vehicle.StopID)), newLine)
+
+	if vehicle.CurrentStatus != nil {
+		fmt.Fprintf(&b, "CurrentStatus: %s%s", sc.Sprint(*vehicle.CurrentStatus), newLine)
+	} else {
+		fmt.Fprintf(&b, "CurrentStatus: <none>%s", newLine)
+	}
+
+	fmt.Fprintf(&b, "Timestamp: %s%s", sc.Sprint(unPtrT(vehicle.Timestamp, sc)), newLine)
+	fmt.Fprintf(&b, "CongestionLevel: %s%s", sc.Sprint(vehicle.CongestionLevel), newLine)
+
+	if vehicle.OccupancyStatus != nil {
+		fmt.Fprintf(&b, "OccupancyStatus: %s%s", sc.Sprint(*vehicle.OccupancyStatus), newLine)
+	} else {
+		fmt.Fprintf(&b, "OccupancyStatus: <none>%s", newLine)
+	}
+
+	if vehicle.OccupancyPercentage != nil {
+		fmt.Fprintf(&b, "OccupancyPercentage: %s%s", sc.Sprint(*vehicle.OccupancyPercentage), newLine)
+	} else {
+		fmt.Fprintf(&b, "OccupancyPercentage: <none>%s", newLine)
+	}
+
+	return b.String()
+}
+
 func unPtr(s *string) string {
 	if s == nil {
 		return "<none>"
@@ -185,6 +249,20 @@ func unPtrI(s *uint32) string {
 		return "<none>"
 	}
 	return fmt.Sprintf("%d", s)
+}
+
+func unPtrF(s *float32) string {
+	if s == nil {
+		return "<none>"
+	}
+	return fmt.Sprintf("%f", *s)
+}
+
+func unPtrF64(s *float64) string {
+	if s == nil {
+		return "<none>"
+	}
+	return fmt.Sprintf("%f", *s)
 }
 
 func unPtrT(t *time.Time, c *color.Color) string {

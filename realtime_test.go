@@ -12,6 +12,7 @@ import (
 
 const tripID1 = "tripID1"
 const vehicleID1 = "vehicleID1"
+const stopID1 = "stopID1"
 
 var time1 time.Time = time.Unix(2<<28, 0).UTC()
 
@@ -44,7 +45,7 @@ func TestSoloTrip(t *testing.T) {
 	}
 	vehicle := gtfs.Vehicle{
 		ID: &gtfs.VehicleID{
-			ID: vehicleID1,
+			ID: ptr(vehicleID1),
 		},
 		IsEntityInMessage: false,
 	}
@@ -170,6 +171,82 @@ func TestAlert(t *testing.T) {
 	}
 }
 
-func ptr(s string) *string {
-	return &s
+func TestVehicle(t *testing.T) {
+	timestamp := uint64(time1.Unix())
+	header := &gtfsrt.FeedHeader{
+		GtfsRealtimeVersion: ptr("2.0"),
+		Timestamp:           &timestamp,
+	}
+	entities := []*gtfsrt.FeedEntity{
+		{
+			Id: ptr("1"),
+			Vehicle: &gtfsrt.VehiclePosition{
+				Trip: &gtfsrt.TripDescriptor{
+					TripId: ptr(tripID1),
+				},
+				Vehicle: &gtfsrt.VehicleDescriptor{
+					Id: ptr(vehicleID1),
+				},
+				Position: &gtfsrt.Position{
+					Latitude:  ptr(float32(1.0)),
+					Longitude: ptr(float32(2.0)),
+					Bearing:   ptr(float32(3.0)),
+					Odometer:  ptr(4.0),
+					Speed:     ptr(float32(5.0)),
+				},
+				CurrentStopSequence: ptr(uint32(6)),
+				StopId:              ptr(stopID1),
+				CurrentStatus:       ptr(gtfsrt.VehiclePosition_STOPPED_AT),
+				Timestamp:           &timestamp,
+				CongestionLevel:     ptr(gtfsrt.VehiclePosition_CONGESTION),
+				OccupancyStatus:     ptr(gtfsrt.VehiclePosition_EMPTY),
+			},
+		},
+	}
+
+	trip := gtfs.Trip{
+		ID: gtfs.TripID{
+			ID:          tripID1,
+			DirectionID: gtfs.DirectionIDUnspecified,
+		},
+		IsEntityInMessage: false,
+	}
+	position := gtfs.Position{
+		Latitude:  ptr(float32(1.0)),
+		Longitude: ptr(float32(2.0)),
+		Bearing:   ptr(float32(3.0)),
+		Odometer:  ptr(4.0),
+		Speed:     ptr(float32(5.0)),
+	}
+	vehicle := gtfs.Vehicle{
+		ID: &gtfs.VehicleID{
+			ID: ptr(vehicleID1),
+		},
+		Position:            &position,
+		CurrentStopSequence: ptr(uint32(6)),
+		StopID:              ptr(stopID1),
+		CurrentStatus:       ptr(gtfsrt.VehiclePosition_STOPPED_AT),
+		Timestamp:           &time1,
+		CongestionLevel:     gtfsrt.VehiclePosition_CONGESTION,
+		OccupancyStatus:     ptr(gtfsrt.VehiclePosition_EMPTY),
+		IsEntityInMessage:   true,
+	}
+	trip.Vehicle = &vehicle
+	vehicle.Trip = &trip
+
+	expectedResult := &gtfs.Realtime{
+		CreatedAt: time1,
+		Trips:     []gtfs.Trip{trip},
+		Vehicles:  []gtfs.Vehicle{vehicle},
+	}
+
+	result := testutil.MustParse(t, header, entities, &gtfs.ParseRealtimeOptions{})
+
+	if !reflect.DeepEqual(result, expectedResult) {
+		t.Errorf("actual:\n%+v\n!= expected:\n%+v", result, expectedResult)
+	}
+}
+
+func ptr[T any](t T) *T {
+	return &t
 }

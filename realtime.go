@@ -99,15 +99,36 @@ type StopTimeEvent struct {
 }
 
 type VehicleID struct {
-	ID           string
-	Label        string
-	LicencePlate string
+	ID           *string
+	Label        *string
+	LicencePlate *string
 }
+
+type Position = gtfsrt.Position
+type CurrentStatus = gtfsrt.VehiclePosition_VehicleStopStatus
+type CongestionLevel = gtfsrt.VehiclePosition_CongestionLevel
+type OccupancyStatus = gtfsrt.VehiclePosition_OccupancyStatus
 
 type Vehicle struct {
 	ID *VehicleID
 
 	Trip *Trip
+
+	Position *Position
+
+	CurrentStopSequence *uint32
+
+	StopID *string
+
+	CurrentStatus *CurrentStatus
+
+	Timestamp *time.Time
+
+	CongestionLevel CongestionLevel
+
+	OccupancyStatus *OccupancyStatus
+
+	OccupancyPercentage *uint32
 
 	IsEntityInMessage bool
 }
@@ -249,7 +270,8 @@ func ParseRealtime(content []byte, opts *ParseRealtimeOptions) (*Realtime, error
 		if tripUpdate := entity.TripUpdate; tripUpdate != nil {
 			trip, vehicle, ok = parseTripUpdate(tripUpdate, opts, feedMessage.GetHeader().GetTimestamp())
 		} else if vehiclePosition := entity.Vehicle; vehiclePosition != nil {
-			trip, vehicle, ok = parseVehicle(vehiclePosition, opts, feedMessage.GetHeader().GetTimestamp())
+			trip, vehicle = parseVehicle(vehiclePosition, opts, feedMessage.GetHeader().GetTimestamp())
+			ok = true
 		} else if alert := entity.Alert; alert != nil {
 			result.Alerts = append(result.Alerts, parseAlert(entity.GetId(), alert, opts))
 			continue
@@ -349,19 +371,31 @@ func parseTripUpdate(tripUpdate *gtfsrt.TripUpdate, opts *ParseRealtimeOptions, 
 	return trip, vehicle, true
 }
 
-func parseVehicle(vehiclePosition *gtfsrt.VehiclePosition, opts *ParseRealtimeOptions, feedCreatedAt uint64) (*Trip, *Vehicle, bool) {
+func parseVehicle(vehiclePosition *gtfsrt.VehiclePosition, opts *ParseRealtimeOptions, feedCreatedAt uint64) (*Trip, *Vehicle) {
+	var congestionLevel = gtfsrt.VehiclePosition_UNKNOWN_CONGESTION_LEVEL
+	if vehiclePosition.CongestionLevel != nil {
+		congestionLevel = *vehiclePosition.CongestionLevel
+	}
 	vehicle := &Vehicle{
-		ID:                parseVehicleDescriptor(vehiclePosition.Vehicle, opts),
-		IsEntityInMessage: true,
+		ID:                  parseVehicleDescriptor(vehiclePosition.Vehicle, opts),
+		Position:            vehiclePosition.Position,
+		CurrentStopSequence: vehiclePosition.CurrentStopSequence,
+		StopID:              vehiclePosition.StopId,
+		CurrentStatus:       vehiclePosition.CurrentStatus,
+		Timestamp:           convertOptionalTimestamp(vehiclePosition.Timestamp, opts.timezoneOrUTC()),
+		CongestionLevel:     congestionLevel,
+		OccupancyStatus:     vehiclePosition.OccupancyStatus,
+		OccupancyPercentage: vehiclePosition.OccupancyPercentage,
+		IsEntityInMessage:   true,
 	}
 	if vehiclePosition.Trip == nil {
-		return nil, vehicle, true
+		return nil, vehicle
 	}
 	trip := &Trip{
 		ID:                parseTripDescriptor(vehiclePosition.Trip, opts),
 		IsEntityInMessage: false,
 	}
-	return trip, vehicle, false
+	return trip, vehicle
 }
 
 func mergeTrip(t *Trip, new Trip) {
@@ -426,10 +460,13 @@ func parseStartDate(startDate *string, timezone *time.Location) (bool, time.Time
 }
 
 func parseVehicleDescriptor(vehicleDesc *gtfsrt.VehicleDescriptor, opts *ParseRealtimeOptions) *VehicleID {
+	if vehicleDesc == nil {
+		return nil
+	}
 	vehicleID := VehicleID{
-		ID:           vehicleDesc.GetId(),
-		Label:        vehicleDesc.GetLabel(),
-		LicencePlate: vehicleDesc.GetLicensePlate(),
+		ID:           vehicleDesc.Id,
+		Label:        vehicleDesc.Label,
+		LicencePlate: vehicleDesc.LicensePlate,
 	}
 	var zeroVehicleID VehicleID
 	if vehicleID == zeroVehicleID {
