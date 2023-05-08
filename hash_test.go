@@ -3,12 +3,13 @@ package gtfs
 import (
 	"crypto/md5"
 	"fmt"
+	gtfsrt "github.com/jamespfennell/gtfs/proto"
 	"testing"
 	"time"
 )
 
 func BenchmarkHashTrip(b *testing.B) {
-	trip := mkTrip()
+	trip := mkTrip(0)
 	for n := 0; n < b.N; n++ {
 		h := md5.New()
 		trip.Hash(h)
@@ -131,17 +132,17 @@ func TestHashTrip(t *testing.T) {
 		},
 	} {
 		t.Run(tc.field, func(t *testing.T) {
-			trip := mkTrip()
+			trip := mkTrip(0)
 			modifierPairs := combinations(allModifiers(tc.getter(&trip)))
 			for _, pair := range modifierPairs {
 				t.Run(fmt.Sprintf("%s-%s", pair[0].name, pair[1].name), func(t *testing.T) {
-					trip1 := mkTrip()
+					trip1 := mkTrip(0)
 					pair[0].fn(tc.getter(&trip1))
 					h1 := md5.New()
 					trip1.Hash(h1)
 					s1 := fmt.Sprintf("%x", h1.Sum(nil))
 
-					trip2 := mkTrip()
+					trip2 := mkTrip(0)
 					pair[1].fn(tc.getter(&trip2))
 					h2 := md5.New()
 					trip2.Hash(h2)
@@ -185,6 +186,84 @@ func TestHashVehicle(t *testing.T) {
 				return &v.ID.LicencePlate
 			},
 		},
+		{
+			"trip",
+			func(v *Vehicle) any {
+				return &v.Trip
+			},
+		},
+		{
+			"position",
+			func(v *Vehicle) any {
+				return &v.Position
+			},
+		},
+		{
+			"position.longitude",
+			func(v *Vehicle) any {
+				return &v.Position.Longitude
+			},
+		},
+		{
+			"position.bearing",
+			func(v *Vehicle) any {
+				return &v.Position.Bearing
+			},
+		},
+		{
+			"position.odometer",
+			func(v *Vehicle) any {
+				return &v.Position.Odometer
+			},
+		},
+		{
+			"position.speed",
+			func(v *Vehicle) any {
+				return &v.Position.Speed
+			},
+		},
+		{
+			"current_stop_sequence",
+			func(v *Vehicle) any {
+				return &v.CurrentStopSequence
+			},
+		},
+		{
+			"stop_id",
+			func(v *Vehicle) any {
+				return &v.StopID
+			},
+		},
+		{
+			"current_status",
+			func(v *Vehicle) any {
+				return &v.CurrentStatus
+			},
+		},
+		{
+			"timestamp",
+			func(v *Vehicle) any {
+				return &v.Timestamp
+			},
+		},
+		{
+			"congestion_level",
+			func(v *Vehicle) any {
+				return &v.CongestionLevel
+			},
+		},
+		{
+			"occupancy_status",
+			func(v *Vehicle) any {
+				return &v.OccupancyStatus
+			},
+		},
+		{
+			"occupancy_percentage",
+			func(v *Vehicle) any {
+				return &v.OccupancyPercentage
+			},
+		},
 	} {
 		t.Run(tc.field, func(t *testing.T) {
 			vehicle := mkVehicle()
@@ -204,7 +283,7 @@ func TestHashVehicle(t *testing.T) {
 					s2 := fmt.Sprintf("%x", h2.Sum(nil))
 
 					if s1 == s2 {
-						t.Errorf("hashes match but trips are different\nvehicle1: %v\nvehicle2: %v", vehicle1, vehicle2)
+						t.Errorf("hashes match but vehicles are different\nvehicle1: %v\nvehicle2: %v", vehicle1, vehicle2)
 					}
 				})
 			}
@@ -212,29 +291,29 @@ func TestHashVehicle(t *testing.T) {
 	}
 }
 
-func mkTrip() Trip {
+func mkTrip(i int) Trip {
 	return Trip{
 		ID: TripID{
 			ID:           "id.id",
 			RouteID:      "route.id",
 			HasStartDate: true,
-			StartDate:    mkTime(1),
+			StartDate:    mkTime(i + 1),
 			HasStartTime: true,
-			StartTime:    mkDuration(2),
+			StartTime:    mkDuration(i + 2),
 		},
 		StopTimeUpdates: []StopTimeUpdate{
 			{
-				StopSequence: ptr(uint32(3)),
+				StopSequence: ptr(uint32(i + 3)),
 				StopID:       ptr("stop_time_updates.0.stop_id"),
 				Arrival: &StopTimeEvent{
-					Time:        ptr(mkTime(4)),
-					Delay:       ptr(mkDuration(5)),
-					Uncertainty: ptr(int32(6)),
+					Time:        ptr(mkTime(i + 4)),
+					Delay:       ptr(mkDuration(i + 5)),
+					Uncertainty: ptr(int32(i + 6)),
 				},
 				Departure: &StopTimeEvent{
-					Time:        ptr(mkTime(7)),
-					Delay:       ptr(time.Hour * 8),
-					Uncertainty: ptr(int32(9)),
+					Time:        ptr(mkTime(i + 7)),
+					Delay:       ptr(time.Hour * mkDuration(i+8)),
+					Uncertainty: ptr(int32(i + 9)),
 				},
 				NyctTrack: ptr("stop_time_updates.0.nyct_track"),
 			},
@@ -246,12 +325,32 @@ func mkTrip() Trip {
 func mkVehicle() Vehicle {
 	return Vehicle{
 		ID: &VehicleID{
-			ID:           "vehicle.id.id",
-			Label:        "vehicle.id.label",
-			LicencePlate: "vehicle.id.licence_plate",
+			ID:           ptr("vehicle.id.id"),
+			Label:        ptr("vehicle.id.label"),
+			LicencePlate: ptr("vehicle.id.licence_plate"),
 		},
+		Trip:                ptr(mkTrip(0)),
+		Position:            ptr(mkPosition(9)),
+		CurrentStopSequence: ptr(uint32(15)),
+		StopID:              ptr("vehicle.stop_id"),
+		CurrentStatus:       ptr(gtfsrt.VehiclePosition_IN_TRANSIT_TO),
+		Timestamp:           ptr(mkTime(16)),
+		CongestionLevel:     gtfsrt.VehiclePosition_UNKNOWN_CONGESTION_LEVEL,
+		OccupancyStatus:     ptr(gtfsrt.VehiclePosition_FULL),
+		OccupancyPercentage: ptr(uint32(17)),
 	}
 }
+
+func mkPosition(i float32) Position {
+	return Position{
+		Latitude:  ptr(float32(i + 1.0)),
+		Longitude: ptr(float32(i + 2.0)),
+		Bearing:   ptr(float32(i + 3.0)),
+		Odometer:  ptr(float64(i + 4.0)),
+		Speed:     ptr(float32(i + 5.0)),
+	}
+}
+
 func mkTime(i int) time.Time {
 	return time.Date(2023, time.April, 24, 0, 0, 0, 0, time.UTC).Add(time.Duration(i) * time.Hour)
 }
@@ -277,6 +376,10 @@ func allModifiers(a any) []modifier {
 		return []modifier{noOpModifier, otherValueModifier, zeroModifier, nilModifier}
 	case **uint32:
 		return []modifier{noOpModifier, otherValueModifier, zeroModifier, nilModifier}
+	case **float32:
+		return []modifier{noOpModifier, otherValueModifier, zeroModifier, nilModifier}
+	case **float64:
+		return []modifier{noOpModifier, otherValueModifier, zeroModifier, nilModifier}
 	case *string:
 		return []modifier{noOpModifier, otherValueModifier, zeroModifier}
 	case **string:
@@ -293,6 +396,16 @@ func allModifiers(a any) []modifier {
 		return []modifier{noOpModifier, nilModifier}
 	case **VehicleID:
 		return []modifier{noOpModifier, nilModifier}
+	case **Trip:
+		return []modifier{noOpModifier, otherValueModifier, nilModifier}
+	case **Position:
+		return []modifier{noOpModifier, otherValueModifier, nilModifier}
+	case **CurrentStatus:
+		return []modifier{noOpModifier, otherValueModifier, nilModifier}
+	case *CongestionLevel:
+		return []modifier{noOpModifier, otherValueModifier}
+	case **OccupancyStatus:
+		return []modifier{noOpModifier, otherValueModifier, nilModifier}
 	default:
 		panic(fmt.Sprintf("invalid type %T", a))
 	}
@@ -306,6 +419,10 @@ func zeroModifierFn(a any) {
 		*t = ptr(int32(0))
 	case **uint32:
 		*t = ptr(uint32(0))
+	case **float32:
+		*t = ptr(float32(0))
+	case **float64:
+		*t = ptr(float64(0))
 	case *string:
 		*t = ""
 	case **string:
@@ -333,6 +450,10 @@ func nilModifierFn(a any) {
 		*t = nil
 	case **uint32:
 		*t = nil
+	case **float32:
+		*t = nil
+	case **float64:
+		*t = nil
 	case **string:
 		*t = nil
 	case **time.Time:
@@ -342,6 +463,14 @@ func nilModifierFn(a any) {
 	case **StopTimeEvent:
 		*t = nil
 	case **VehicleID:
+		*t = nil
+	case **Trip:
+		*t = nil
+	case **Position:
+		*t = nil
+	case **CurrentStatus:
+		*t = nil
+	case **OccupancyStatus:
 		*t = nil
 	default:
 		panic(fmt.Sprintf("invalid type %T", a))
@@ -356,18 +485,32 @@ func otherValueModifierFn(a any) {
 		*t = ptr(int32(101))
 	case **uint32:
 		*t = ptr(uint32(102))
+	case **float32:
+		*t = ptr(float32(103))
+	case **float64:
+		*t = ptr(float64(104))
 	case *string:
 		*t = "other"
 	case **string:
 		*t = ptr("other")
 	case *time.Duration:
-		*t = mkDuration(103)
+		*t = mkDuration(105)
 	case **time.Duration:
-		*t = ptr(mkDuration(104))
+		*t = ptr(mkDuration(106))
 	case *time.Time:
-		*t = mkTime(105)
+		*t = mkTime(107)
 	case **time.Time:
-		*t = ptr(mkTime(106))
+		*t = ptr(mkTime(108))
+	case **Trip:
+		*t = ptr(mkTrip(109))
+	case **Position:
+		*t = ptr(mkPosition(110))
+	case **CurrentStatus:
+		*t = ptr(gtfsrt.VehiclePosition_STOPPED_AT)
+	case *CongestionLevel:
+		*t = gtfsrt.VehiclePosition_STOP_AND_GO
+	case **OccupancyStatus:
+		*t = ptr(gtfsrt.VehiclePosition_CRUSHED_STANDING_ROOM_ONLY)
 	default:
 		panic(fmt.Sprintf("invalid type %T", a))
 	}

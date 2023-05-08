@@ -63,7 +63,7 @@ func TestUpdatesTripId(t *testing.T) {
 			if vehicleId != "" {
 				vehicle = &gtfs.Vehicle{
 					ID: &gtfs.VehicleID{
-						ID: *testCase.VehicleId,
+						ID: testCase.VehicleId,
 					},
 					IsEntityInMessage: false,
 				}
