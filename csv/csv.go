@@ -7,6 +7,10 @@ import (
 	"encoding/csv"
 	"fmt"
 	"io"
+
+	"golang.org/x/text/encoding"
+	"golang.org/x/text/encoding/unicode"
+	"golang.org/x/text/transform"
 )
 
 type File struct {
@@ -24,7 +28,7 @@ type row struct {
 }
 
 func New(reader io.ReadCloser) (*File, error) {
-	csvReader := csv.NewReader(reader)
+	csvReader := BOMAwareCSVReader(reader)
 	csvReader.ReuseRecord = true
 	firstRow, err := csvReader.Read()
 	if err == io.EOF {
@@ -134,4 +138,14 @@ func (f *File) Close() error {
 		return f.ioErr
 	}
 	return closeErr
+}
+
+// From: https://stackoverflow.com/a/76023436
+//
+// BOMAwareCSVReader will detect a UTF BOM (Byte Order Mark) at the
+// start of the data and transform to UTF8 accordingly.
+// If there is no BOM, it will read the data without any transformation.
+func BOMAwareCSVReader(reader io.Reader) *csv.Reader {
+	var transformer = unicode.BOMOverride(encoding.Nop.NewDecoder())
+	return csv.NewReader(transform.NewReader(reader, transformer))
 }
