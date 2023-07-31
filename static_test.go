@@ -433,6 +433,254 @@ func TestParse(t *testing.T) {
 				},
 			},
 		},
+		{
+			desc: "empty shapes file",
+			content: newZipBuilder().add(
+				"shapes.txt",
+				"shape_id,shape_pt_lat,shape_pt_lon,shape_pt_sequence\n",
+			).build(),
+			expected: &Static{
+				Shapes: []Shape{},
+			},
+		},
+		{
+			desc: "single point shape",
+			content: newZipBuilder().add(
+				"shapes.txt",
+				"shape_id,shape_pt_lat,shape_pt_lon,shape_pt_sequence\n"+
+					"SHAPE_1,1.5,2.5,1\n",
+			).build(),
+			expected: &Static{
+				Shapes: []Shape{
+					{
+						ID: "SHAPE_1",
+						Points: []ShapePoint{
+							{
+								Latitude:  1.5,
+								Longitude: 2.5,
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			desc: "multi point shape",
+			content: newZipBuilder().add(
+				"shapes.txt",
+				"shape_id,shape_pt_lat,shape_pt_lon,shape_pt_sequence\n"+
+					"SHAPE_1,1.5,2.5,1\n",
+				"SHAPE_1,2.5,3.5,2\n",
+				"SHAPE_1,3.5,4.5,3\n",
+			).build(),
+			expected: &Static{
+				Shapes: []Shape{
+					{
+						ID: "SHAPE_1",
+						Points: []ShapePoint{
+							{
+								Latitude:  1.5,
+								Longitude: 2.5,
+							},
+							{
+								Latitude:  2.5,
+								Longitude: 3.5,
+							},
+							{
+								Latitude:  3.5,
+								Longitude: 4.5,
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			desc: "points not in row order",
+			content: newZipBuilder().add(
+				"shapes.txt",
+				"shape_id,shape_pt_lat,shape_pt_lon,shape_pt_sequence\n"+
+					"SHAPE_1,1.5,2.5,3\n",
+				"SHAPE_1,2.5,3.5,2\n",
+				"SHAPE_1,3.5,4.5,1\n",
+			).build(),
+			expected: &Static{
+				Shapes: []Shape{
+					{
+						ID: "SHAPE_1",
+						Points: []ShapePoint{
+							{
+								Latitude:  3.5,
+								Longitude: 4.5,
+							},
+							{
+								Latitude:  2.5,
+								Longitude: 3.5,
+							},
+							{
+								Latitude:  1.5,
+								Longitude: 2.5,
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			desc: "multiple shapes",
+			content: newZipBuilder().add(
+				"shapes.txt",
+				"shape_id,shape_pt_lat,shape_pt_lon,shape_pt_sequence\n"+
+					"SHAPE_1,1.5,2.5,1\n",
+				"SHAPE_1,2.5,3.5,2\n",
+				"SHAPE_1,3.5,4.5,3\n",
+				"SHAPE_2,4.5,5.5,1\n",
+				"SHAPE_2,5.5,6.5,2\n",
+				"SHAPE_3,6.5,7.5,1\n",
+				"SHAPE_3,7.5,8.5,2\n",
+			).build(),
+			expected: &Static{
+				Shapes: []Shape{
+					{
+						ID: "SHAPE_1",
+						Points: []ShapePoint{
+							{
+								Latitude:  1.5,
+								Longitude: 2.5,
+							},
+							{
+								Latitude:  2.5,
+								Longitude: 3.5,
+							},
+							{
+								Latitude:  3.5,
+								Longitude: 4.5,
+							},
+						},
+					},
+					{
+						ID: "SHAPE_2",
+						Points: []ShapePoint{
+							{
+								Latitude:  4.5,
+								Longitude: 5.5,
+							},
+							{
+								Latitude:  5.5,
+								Longitude: 6.5,
+							},
+						},
+					},
+					{
+						ID: "SHAPE_3",
+						Points: []ShapePoint{
+							{
+								Latitude:  6.5,
+								Longitude: 7.5,
+							},
+							{
+								Latitude:  7.5,
+								Longitude: 8.5,
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			desc: "multiple shapes, random order",
+			content: newZipBuilder().add(
+				"shapes.txt",
+				"shape_id,shape_pt_lat,shape_pt_lon,shape_pt_sequence\n"+
+					"SHAPE_3,7.5,8.5,2\n",
+				"SHAPE_1,2.5,3.5,2\n",
+				"SHAPE_2,5.5,6.5,2\n",
+				"SHAPE_1,3.5,4.5,3\n",
+				"SHAPE_2,4.5,5.5,1\n",
+				"SHAPE_1,1.5,2.5,1\n",
+				"SHAPE_3,6.5,7.5,1\n",
+			).build(),
+			expected: &Static{
+				Shapes: []Shape{
+					{
+						ID: "SHAPE_1",
+						Points: []ShapePoint{
+							{
+								Latitude:  1.5,
+								Longitude: 2.5,
+							},
+							{
+								Latitude:  2.5,
+								Longitude: 3.5,
+							},
+							{
+								Latitude:  3.5,
+								Longitude: 4.5,
+							},
+						},
+					},
+					{
+						ID: "SHAPE_2",
+						Points: []ShapePoint{
+							{
+								Latitude:  4.5,
+								Longitude: 5.5,
+							},
+							{
+								Latitude:  5.5,
+								Longitude: 6.5,
+							},
+						},
+					},
+					{
+						ID: "SHAPE_3",
+						Points: []ShapePoint{
+							{
+								Latitude:  6.5,
+								Longitude: 7.5,
+							},
+							{
+								Latitude:  7.5,
+								Longitude: 8.5,
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			desc: "shape dist traveled",
+			content: newZipBuilder().add(
+				"shapes.txt",
+				"shape_id,shape_pt_lat,shape_pt_lon,shape_pt_sequence,shape_dist_traveled\n"+
+					"SHAPE_1,1.5,2.5,1,0\n",
+				"SHAPE_1,2.5,3.5,2,\n",
+				"SHAPE_1,3.5,4.5,3,20\n",
+			).build(),
+			expected: &Static{
+				Shapes: []Shape{
+					{
+						ID: "SHAPE_1",
+						Points: []ShapePoint{
+							{
+								Latitude:  1.5,
+								Longitude: 2.5,
+								Distance:  ptr(float64(0)),
+							},
+							{
+								Latitude:  2.5,
+								Longitude: 3.5,
+							},
+							{
+								Latitude:  3.5,
+								Longitude: 4.5,
+								Distance:  ptr(float64(20)),
+							},
+						},
+					},
+				},
+			},
+		},
 	} {
 		t.Run(tc.desc, func(t *testing.T) {
 			actual, err := ParseStatic(tc.content, tc.opts)
@@ -487,10 +735,6 @@ func (z *zipBuilder) build() []byte {
 		panic(err)
 	}
 	return b.Bytes()
-}
-
-func ptr[T any](t T) *T {
-	return &t
 }
 
 func intPtr(i int32) *int32 {
