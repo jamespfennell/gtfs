@@ -3,9 +3,10 @@ package gtfs
 import (
 	"crypto/md5"
 	"fmt"
-	gtfsrt "github.com/jamespfennell/gtfs/proto"
 	"testing"
 	"time"
+
+	gtfsrt "github.com/jamespfennell/gtfs/proto"
 )
 
 func BenchmarkHashTrip(b *testing.B) {
@@ -325,9 +326,9 @@ func mkTrip(i int) Trip {
 func mkVehicle() Vehicle {
 	return Vehicle{
 		ID: &VehicleID{
-			ID:           ptr("vehicle.id.id"),
-			Label:        ptr("vehicle.id.label"),
-			LicencePlate: ptr("vehicle.id.licence_plate"),
+			ID:           "vehicle.id.id",
+			Label:        "vehicle.id.label",
+			LicencePlate: "vehicle.id.licence_plate",
 		},
 		Trip:                ptr(mkTrip(0)),
 		Position:            ptr(mkPosition(9)),

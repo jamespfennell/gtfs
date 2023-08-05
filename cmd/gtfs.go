@@ -126,7 +126,7 @@ func formatTrip(trip gtfs.Trip, indent int, printStopTimes bool) string {
 		newLine,
 	)
 	if trip.Vehicle != nil {
-		fmt.Fprintf(&b, "Vehicle: ID %s%s", vc.Sprint(unPtr(trip.Vehicle.GetID().ID)), newLine)
+		fmt.Fprintf(&b, "Vehicle: ID %s%s", vc.Sprint(trip.Vehicle.GetID().ID), newLine)
 	} else {
 		fmt.Fprintf(&b, "Vehicle: <none>%s", newLine)
 	}
@@ -185,9 +185,9 @@ func formatVehicle(vehicle gtfs.Vehicle, indent int) string {
 	newLine := fmt.Sprintf("\n%*s", indent, "")
 	fmt.Fprintf(&b,
 		"VehicleID %s  Label %s  LicencePlate %s%s",
-		tc.Sprint(unPtr(vehicle.GetID().ID)),
-		tc.Sprint(unPtr(vehicle.GetID().Label)),
-		tc.Sprint(unPtr(vehicle.GetID().LicencePlate)),
+		tc.Sprint(vehicle.GetID().ID),
+		tc.Sprint(vehicle.GetID().Label),
+		tc.Sprint(vehicle.GetID().LicencePlate),
 		newLine,
 	)
 	if vehicle.Trip != nil {
@@ -233,6 +233,8 @@ func formatVehicle(vehicle gtfs.Vehicle, indent int) string {
 	} else {
 		fmt.Fprintf(&b, "OccupancyPercentage: <none>%s", newLine)
 	}
+
+	fmt.Fprintf(&b, "IsEntityInMessage: %t%s", vehicle.IsEntityInMessage, newLine)
 
 	return b.String()
 }

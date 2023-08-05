@@ -1,249 +1,296 @@
 package gtfs_test
 
 import (
-	"reflect"
 	"testing"
 	"time"
 
+	"github.com/google/go-cmp/cmp"
 	"github.com/jamespfennell/gtfs"
 	"github.com/jamespfennell/gtfs/internal/testutil"
 	gtfsrt "github.com/jamespfennell/gtfs/proto"
 )
 
-const tripID1 = "tripID1"
-const vehicleID1 = "vehicleID1"
-const stopID1 = "stopID1"
+const (
+	tripID1    = "tripID1"
+	vehicleID1 = "vehicleID1"
+	stopID1    = "stopID1"
+)
 
-var time1 time.Time = time.Unix(2<<28, 0).UTC()
+var createTime time.Time = time.Unix(2<<28, 0).UTC()
+var time1 time.Time = time.Unix(2<<28+100, 0).UTC()
+var time2 time.Time = time.Unix(2<<28+200, 0).UTC()
 
-func TestSoloTrip(t *testing.T) {
-	timestamp := uint64(time1.Unix())
-	header := &gtfsrt.FeedHeader{
-		GtfsRealtimeVersion: ptr("2.0"),
-		Timestamp:           &timestamp,
-	}
-	entities := []*gtfsrt.FeedEntity{
+func TestRealtime(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		in   []*gtfsrt.FeedEntity
+		want *gtfs.Realtime
+	}{
 		{
-			Id: ptr("1"),
-			TripUpdate: &gtfsrt.TripUpdate{
-				Trip: &gtfsrt.TripDescriptor{
-					TripId: ptr(tripID1),
-				},
-				Vehicle: &gtfsrt.VehicleDescriptor{
-					Id: ptr(vehicleID1),
+			name: "trip",
+			in: []*gtfsrt.FeedEntity{
+				{
+					Id: ptr("1"),
+					TripUpdate: &gtfsrt.TripUpdate{
+						Trip: &gtfsrt.TripDescriptor{
+							TripId: ptr(tripID1),
+						},
+						Vehicle: &gtfsrt.VehicleDescriptor{
+							Id: ptr(vehicleID1),
+						},
+						// TODO: other fields
+					},
 				},
 			},
+			want: func() *gtfs.Realtime {
+				trip := gtfs.Trip{
+					ID: gtfs.TripID{
+						ID:          tripID1,
+						DirectionID: gtfs.DirectionIDUnspecified,
+					},
+					IsEntityInMessage: true,
+				}
+				vehicle := gtfs.Vehicle{
+					ID: &gtfs.VehicleID{
+						ID: vehicleID1,
+					},
+					IsEntityInMessage: false,
+				}
+				trip.Vehicle = &vehicle
+				vehicle.Trip = &trip
+				return &gtfs.Realtime{
+					CreatedAt: createTime,
+					Trips:     []gtfs.Trip{trip},
+					Vehicles:  []gtfs.Vehicle{vehicle},
+				}
+			}(),
 		},
-	}
-
-	trip := gtfs.Trip{
-		ID: gtfs.TripID{
-			ID:          tripID1,
-			DirectionID: gtfs.DirectionIDUnspecified,
-		},
-		IsEntityInMessage: true,
-	}
-	vehicle := gtfs.Vehicle{
-		ID: &gtfs.VehicleID{
-			ID: ptr(vehicleID1),
-		},
-		IsEntityInMessage: false,
-	}
-	trip.Vehicle = &vehicle
-	vehicle.Trip = &trip
-	expectedResult := &gtfs.Realtime{
-		CreatedAt: time1,
-		Trips:     []gtfs.Trip{trip},
-		Vehicles:  []gtfs.Vehicle{vehicle},
-	}
-
-	result := testutil.MustParse(t, header, entities, &gtfs.ParseRealtimeOptions{})
-
-	if !reflect.DeepEqual(result, expectedResult) {
-		t.Errorf("actual:\n%+v\n!= expected:\n%+v", result, expectedResult)
-	}
-}
-
-func TestAlert(t *testing.T) {
-	start := uint64(100)
-	startT := time.Unix(100, 0).UTC()
-	end := uint64(200)
-	endT := time.Unix(200, 0).UTC()
-	cause := gtfsrt.Alert_CONSTRUCTION
-	effect := gtfsrt.Alert_SIGNIFICANT_DELAYS
-	entities := []*gtfsrt.FeedEntity{
 		{
-			Id: ptr("AlertID"),
-			Alert: &gtfsrt.Alert{
-				ActivePeriod: []*gtfsrt.TimeRange{
-					{
-						Start: &start,
-						End:   &end,
-					},
-				},
-				InformedEntity: []*gtfsrt.EntitySelector{
-					{
-						AgencyId: ptr("AgencyID"),
-					},
-					{
-						RouteId: ptr("RouteID"),
-					},
-					{
-						StopId: ptr("StopID"),
-					},
-				},
-				Cause:  &cause,
-				Effect: &effect,
-				Url: &gtfsrt.TranslatedString{
-					Translation: []*gtfsrt.TranslatedString_Translation{
-						{
-							Text:     ptr("UrlText"),
-							Language: ptr("UrlLanguage"),
+			name: "vehicle",
+			in: []*gtfsrt.FeedEntity{
+				{
+					Id: ptr("1"),
+					Vehicle: &gtfsrt.VehiclePosition{
+						Trip: &gtfsrt.TripDescriptor{
+							TripId: ptr(tripID1),
 						},
-					},
-				},
-				HeaderText: &gtfsrt.TranslatedString{
-					Translation: []*gtfsrt.TranslatedString_Translation{
-						{
-							Text:     ptr("HeaderText"),
-							Language: ptr("HeaderLanguage"),
+						Vehicle: &gtfsrt.VehicleDescriptor{
+							Id: ptr(vehicleID1),
 						},
-					},
-				},
-				DescriptionText: &gtfsrt.TranslatedString{
-					Translation: []*gtfsrt.TranslatedString_Translation{
-						{
-							Text:     ptr("DescriptionText"),
-							Language: ptr("DescriptionLanguage"),
+						Position: &gtfsrt.Position{
+							Latitude:  ptr(float32(1.0)),
+							Longitude: ptr(float32(2.0)),
+							Bearing:   ptr(float32(3.0)),
+							Odometer:  ptr(4.0),
+							Speed:     ptr(float32(5.0)),
 						},
+						CurrentStopSequence: ptr(uint32(6)),
+						StopId:              ptr(stopID1),
+						CurrentStatus:       ptr(gtfsrt.VehiclePosition_STOPPED_AT),
+						Timestamp:           ptr(uint64(time1.Unix())),
+						CongestionLevel:     ptr(gtfsrt.VehiclePosition_CONGESTION),
+						OccupancyStatus:     ptr(gtfsrt.VehiclePosition_EMPTY),
 					},
 				},
-				// TODO: other fields
 			},
-		},
-	}
-
-	wantAlert := gtfs.Alert{
-		ID: "AlertID",
-		ActivePeriods: []gtfs.AlertActivePeriod{
-			{
-				StartsAt: &startT,
-				EndsAt:   &endT,
-			},
-		},
-		InformedEntities: []gtfs.AlertInformedEntity{
-			{
-				AgencyID: ptr("AgencyID"),
-			},
-			{
-				RouteID: ptr("RouteID"),
-			},
-			{
-				StopID: ptr("StopID"),
-			},
-		},
-		Cause:  cause,
-		Effect: effect,
-		URL: []gtfs.AlertText{
-			{
-				Text:     "UrlText",
-				Language: "UrlLanguage",
-			},
-		},
-		Header: []gtfs.AlertText{
-			{
-				Text:     "HeaderText",
-				Language: "HeaderLanguage",
-			},
-		},
-		Description: []gtfs.AlertText{
-			{
-				Text:     "DescriptionText",
-				Language: "DescriptionLanguage",
-			},
-		},
-	}
-
-	result := testutil.MustParse(t, nil, entities, &gtfs.ParseRealtimeOptions{})
-
-	if !reflect.DeepEqual(result.Alerts, []gtfs.Alert{wantAlert}) {
-		t.Errorf("actual:\n%+v\n!= expected:\n%+v", result.Alerts, []gtfs.Alert{wantAlert})
-	}
-}
-
-func TestVehicle(t *testing.T) {
-	timestamp := uint64(time1.Unix())
-	header := &gtfsrt.FeedHeader{
-		GtfsRealtimeVersion: ptr("2.0"),
-		Timestamp:           &timestamp,
-	}
-	entities := []*gtfsrt.FeedEntity{
-		{
-			Id: ptr("1"),
-			Vehicle: &gtfsrt.VehiclePosition{
-				Trip: &gtfsrt.TripDescriptor{
-					TripId: ptr(tripID1),
-				},
-				Vehicle: &gtfsrt.VehicleDescriptor{
-					Id: ptr(vehicleID1),
-				},
-				Position: &gtfsrt.Position{
+			want: func() *gtfs.Realtime {
+				trip := gtfs.Trip{
+					ID: gtfs.TripID{
+						ID:          tripID1,
+						DirectionID: gtfs.DirectionIDUnspecified,
+					},
+					IsEntityInMessage: false,
+				}
+				position := gtfs.Position{
 					Latitude:  ptr(float32(1.0)),
 					Longitude: ptr(float32(2.0)),
 					Bearing:   ptr(float32(3.0)),
 					Odometer:  ptr(4.0),
 					Speed:     ptr(float32(5.0)),
+				}
+				vehicle := gtfs.Vehicle{
+					ID: &gtfs.VehicleID{
+						ID: vehicleID1,
+					},
+					Position:            &position,
+					CurrentStopSequence: ptr(uint32(6)),
+					StopID:              ptr(stopID1),
+					CurrentStatus:       ptr(gtfsrt.VehiclePosition_STOPPED_AT),
+					Timestamp:           &time1,
+					CongestionLevel:     gtfsrt.VehiclePosition_CONGESTION,
+					OccupancyStatus:     ptr(gtfsrt.VehiclePosition_EMPTY),
+					IsEntityInMessage:   true,
+				}
+				trip.Vehicle = &vehicle
+				vehicle.Trip = &trip
+
+				return &gtfs.Realtime{
+					CreatedAt: createTime,
+					Trips:     []gtfs.Trip{trip},
+					Vehicles:  []gtfs.Vehicle{vehicle},
+				}
+			}(),
+		},
+		{
+			name: "alert",
+			in: []*gtfsrt.FeedEntity{
+				{
+					Id: ptr("AlertID"),
+					Alert: &gtfsrt.Alert{
+						ActivePeriod: []*gtfsrt.TimeRange{
+							{
+								Start: ptr(uint64(time1.Unix())),
+								End:   ptr(uint64(time2.Unix())),
+							},
+						},
+						InformedEntity: []*gtfsrt.EntitySelector{
+							{
+								AgencyId: ptr("AgencyID"),
+							},
+							{
+								RouteId: ptr("RouteID"),
+							},
+							{
+								StopId: ptr("StopID"),
+							},
+						},
+						Cause:  ptr(gtfsrt.Alert_CONSTRUCTION),
+						Effect: ptr(gtfsrt.Alert_SIGNIFICANT_DELAYS),
+						Url: &gtfsrt.TranslatedString{
+							Translation: []*gtfsrt.TranslatedString_Translation{
+								{
+									Text:     ptr("UrlText"),
+									Language: ptr("UrlLanguage"),
+								},
+							},
+						},
+						HeaderText: &gtfsrt.TranslatedString{
+							Translation: []*gtfsrt.TranslatedString_Translation{
+								{
+									Text:     ptr("HeaderText"),
+									Language: ptr("HeaderLanguage"),
+								},
+							},
+						},
+						DescriptionText: &gtfsrt.TranslatedString{
+							Translation: []*gtfsrt.TranslatedString_Translation{
+								{
+									Text:     ptr("DescriptionText"),
+									Language: ptr("DescriptionLanguage"),
+								},
+							},
+						},
+						// TODO: other fields
+					},
 				},
-				CurrentStopSequence: ptr(uint32(6)),
-				StopId:              ptr(stopID1),
-				CurrentStatus:       ptr(gtfsrt.VehiclePosition_STOPPED_AT),
-				Timestamp:           &timestamp,
-				CongestionLevel:     ptr(gtfsrt.VehiclePosition_CONGESTION),
-				OccupancyStatus:     ptr(gtfsrt.VehiclePosition_EMPTY),
+			},
+			want: &gtfs.Realtime{
+				CreatedAt: createTime,
+				Alerts: []gtfs.Alert{
+					{
+						ID: "AlertID",
+						ActivePeriods: []gtfs.AlertActivePeriod{
+							{
+								StartsAt: ptr(time1),
+								EndsAt:   ptr(time2),
+							},
+						},
+						InformedEntities: []gtfs.AlertInformedEntity{
+							{
+								AgencyID: ptr("AgencyID"),
+							},
+							{
+								RouteID: ptr("RouteID"),
+							},
+							{
+								StopID: ptr("StopID"),
+							},
+						},
+						Cause:  gtfsrt.Alert_CONSTRUCTION,
+						Effect: gtfsrt.Alert_SIGNIFICANT_DELAYS,
+						URL: []gtfs.AlertText{
+							{
+								Text:     "UrlText",
+								Language: "UrlLanguage",
+							},
+						},
+						Header: []gtfs.AlertText{
+							{
+								Text:     "HeaderText",
+								Language: "HeaderLanguage",
+							},
+						},
+						Description: []gtfs.AlertText{
+							{
+								Text:     "DescriptionText",
+								Language: "DescriptionLanguage",
+							},
+						},
+					},
+				},
 			},
 		},
-	}
-
-	trip := gtfs.Trip{
-		ID: gtfs.TripID{
-			ID:          tripID1,
-			DirectionID: gtfs.DirectionIDUnspecified,
+		{
+			name: "trip and vehicle",
+			in: []*gtfsrt.FeedEntity{
+				{
+					Id: ptr("1"),
+					TripUpdate: &gtfsrt.TripUpdate{
+						Trip: &gtfsrt.TripDescriptor{
+							TripId: ptr(tripID1),
+						},
+						Vehicle: &gtfsrt.VehicleDescriptor{
+							Id: ptr(vehicleID1),
+						},
+					},
+				},
+				{
+					Id: ptr("2"),
+					Vehicle: &gtfsrt.VehiclePosition{
+						Trip: &gtfsrt.TripDescriptor{
+							TripId: ptr(tripID1),
+						},
+						Vehicle: &gtfsrt.VehicleDescriptor{
+							Id: ptr(vehicleID1),
+						},
+					},
+				},
+			},
+			want: func() *gtfs.Realtime {
+				trip := gtfs.Trip{
+					ID: gtfs.TripID{
+						ID:          tripID1,
+						DirectionID: gtfs.DirectionIDUnspecified,
+					},
+					IsEntityInMessage: true,
+				}
+				vehicle := gtfs.Vehicle{
+					ID: &gtfs.VehicleID{
+						ID: vehicleID1,
+					},
+					IsEntityInMessage: true,
+				}
+				trip.Vehicle = &vehicle
+				vehicle.Trip = &trip
+				return &gtfs.Realtime{
+					CreatedAt: createTime,
+					Trips:     []gtfs.Trip{trip},
+					Vehicles:  []gtfs.Vehicle{vehicle},
+				}
+			}(),
 		},
-		IsEntityInMessage: false,
-	}
-	position := gtfs.Position{
-		Latitude:  ptr(float32(1.0)),
-		Longitude: ptr(float32(2.0)),
-		Bearing:   ptr(float32(3.0)),
-		Odometer:  ptr(4.0),
-		Speed:     ptr(float32(5.0)),
-	}
-	vehicle := gtfs.Vehicle{
-		ID: &gtfs.VehicleID{
-			ID: ptr(vehicleID1),
-		},
-		Position:            &position,
-		CurrentStopSequence: ptr(uint32(6)),
-		StopID:              ptr(stopID1),
-		CurrentStatus:       ptr(gtfsrt.VehiclePosition_STOPPED_AT),
-		Timestamp:           &time1,
-		CongestionLevel:     gtfsrt.VehiclePosition_CONGESTION,
-		OccupancyStatus:     ptr(gtfsrt.VehiclePosition_EMPTY),
-		IsEntityInMessage:   true,
-	}
-	trip.Vehicle = &vehicle
-	vehicle.Trip = &trip
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			header := &gtfsrt.FeedHeader{
+				GtfsRealtimeVersion: ptr("2.0"),
+				Timestamp:           ptr(uint64(createTime.Unix())),
+			}
+			got := testutil.MustParse(t, header, tc.in, &gtfs.ParseRealtimeOptions{})
 
-	expectedResult := &gtfs.Realtime{
-		CreatedAt: time1,
-		Trips:     []gtfs.Trip{trip},
-		Vehicles:  []gtfs.Vehicle{vehicle},
-	}
-
-	result := testutil.MustParse(t, header, entities, &gtfs.ParseRealtimeOptions{})
-
-	if !reflect.DeepEqual(result, expectedResult) {
-		t.Errorf("actual:\n%+v\n!= expected:\n%+v", result, expectedResult)
+			if diff := cmp.Diff(got, tc.want); diff != "" {
+				t.Errorf("got:\n%+v\n!= want:\n%+v\ndiff: %s", got, tc.want, diff)
+			}
+		})
 	}
 }
 

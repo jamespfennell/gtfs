@@ -18,18 +18,15 @@ const vehicleID2 = "vehicle ID 2"
 
 func TestUpdatesTripId(t *testing.T) {
 	testCases := []struct {
-		VehicleId   *string
+		VehicleId   string
 		DirectionId *uint32
 	}{
 		{
-			VehicleId:   ptr(vehicleID1),
+			VehicleId:   vehicleID1,
 			DirectionId: uint32Ptr(1),
 		},
 		{
-			VehicleId: ptr(vehicleID2),
-		},
-		{
-			VehicleId: nil,
+			VehicleId: vehicleID2,
 		},
 	}
 	for i, testCase := range testCases {
@@ -43,7 +40,7 @@ func TestUpdatesTripId(t *testing.T) {
 							DirectionId: testCase.DirectionId,
 						},
 						Vehicle: &gtfsrt.VehicleDescriptor{
-							Id: testCase.VehicleId,
+							Id: ptr(testCase.VehicleId),
 						},
 					},
 				},
@@ -54,10 +51,7 @@ func TestUpdatesTripId(t *testing.T) {
 			})
 
 			var expectedTripId string = ""
-			var vehicleId string = ""
-			if testCase.VehicleId != nil {
-				vehicleId = *testCase.VehicleId
-			}
+			vehicleId := testCase.VehicleId
 
 			var vehicle *gtfs.Vehicle = nil
 			if vehicleId != "" {

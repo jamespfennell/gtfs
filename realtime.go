@@ -99,12 +99,28 @@ type StopTimeEvent struct {
 }
 
 type VehicleID struct {
-	ID           *string
-	Label        *string
-	LicencePlate *string
+	ID           string
+	Label        string
+	LicencePlate string
 }
 
-type Position = gtfsrt.Position
+type Position struct {
+	// Degrees North, in the WGS-84 coordinate system.
+	Latitude *float32
+	// Degrees East, in the WGS-84 coordinate system.
+	Longitude *float32
+	// Bearing, in degrees, clockwise from North, i.e., 0 is North and 90 is East.
+	// This can be the compass bearing, or the direction towards the next stop
+	// or intermediate location.
+	// This should not be direction deduced from the sequence of previous
+	// positions, which can be computed from previous data.
+	Bearing *float32
+	// Odometer value, in meters.
+	Odometer *float64
+	// Momentary speed measured by the vehicle, in meters per second.
+	Speed *float32
+}
+
 type CurrentStatus = gtfsrt.VehiclePosition_VehicleStopStatus
 type CongestionLevel = gtfsrt.VehiclePosition_CongestionLevel
 type OccupancyStatus = gtfsrt.VehiclePosition_OccupancyStatus
@@ -378,7 +394,7 @@ func parseVehicle(vehiclePosition *gtfsrt.VehiclePosition, opts *ParseRealtimeOp
 	}
 	vehicle := &Vehicle{
 		ID:                  parseVehicleDescriptor(vehiclePosition.Vehicle, opts),
-		Position:            vehiclePosition.Position,
+		Position:            convertVehiclePosition(vehiclePosition),
 		CurrentStopSequence: vehiclePosition.CurrentStopSequence,
 		StopID:              vehiclePosition.StopId,
 		CurrentStatus:       vehiclePosition.CurrentStatus,
@@ -396,6 +412,23 @@ func parseVehicle(vehiclePosition *gtfsrt.VehiclePosition, opts *ParseRealtimeOp
 		IsEntityInMessage: false,
 	}
 	return trip, vehicle
+}
+
+func convertVehiclePosition(vehiclePosition *gtfsrt.VehiclePosition) *Position {
+	if vehiclePosition == nil {
+		return nil
+	}
+	p := vehiclePosition.Position
+	if p == nil {
+		return nil
+	}
+	return &Position{
+		Latitude:  p.Latitude,
+		Longitude: p.Longitude,
+		Bearing:   p.Bearing,
+		Odometer:  p.Odometer,
+		Speed:     p.Speed,
+	}
 }
 
 func mergeTrip(t *Trip, new Trip) {
@@ -463,10 +496,16 @@ func parseVehicleDescriptor(vehicleDesc *gtfsrt.VehicleDescriptor, opts *ParseRe
 	if vehicleDesc == nil {
 		return nil
 	}
+	valOrEmpty := func(s *string) string {
+		if s == nil {
+			return ""
+		}
+		return *s
+	}
 	vehicleID := VehicleID{
-		ID:           vehicleDesc.Id,
-		Label:        vehicleDesc.Label,
-		LicencePlate: vehicleDesc.LicensePlate,
+		ID:           valOrEmpty(vehicleDesc.Id),
+		Label:        valOrEmpty(vehicleDesc.Label),
+		LicencePlate: valOrEmpty(vehicleDesc.LicensePlate),
 	}
 	var zeroVehicleID VehicleID
 	if vehicleID == zeroVehicleID {
@@ -493,9 +532,9 @@ func parseAlert(ID string, alert *gtfsrt.Alert, opts *ParseRealtimeOptions) Aler
 			EndsAt:   convertOptionalTimestamp(entity.End, opts.timezoneOrUTC()),
 		})
 	}
-	var informedEntites []AlertInformedEntity
+	var informedEntities []AlertInformedEntity
 	for _, entity := range alert.GetInformedEntity() {
-		informedEntites = append(informedEntites, AlertInformedEntity{
+		informedEntities = append(informedEntities, AlertInformedEntity{
 			AgencyID: entity.AgencyId,
 			RouteID:  entity.RouteId,
 			// TODO
@@ -510,7 +549,7 @@ func parseAlert(ID string, alert *gtfsrt.Alert, opts *ParseRealtimeOptions) Aler
 		ActivePeriods:    activePeriods,
 		Cause:            alert.GetCause(),
 		Effect:           alert.GetEffect(),
-		InformedEntities: informedEntites,
+		InformedEntities: informedEntities,
 		Header:           buildAlertText(alert.GetHeaderText()),
 		Description:      buildAlertText(alert.GetDescriptionText()),
 		URL:              buildAlertText(alert.GetUrl()),

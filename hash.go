@@ -70,9 +70,9 @@ func (h *hasher) trip(t *Trip) {
 func (h *hasher) vehicle(v *Vehicle) {
 	h.number(v.ID == nil)
 	if v.ID != nil {
-		h.stringPtr(v.ID.ID)
-		h.stringPtr(v.ID.Label)
-		h.stringPtr(v.ID.LicencePlate)
+		h.string(v.ID.ID)
+		h.string(v.ID.Label)
+		h.string(v.ID.LicencePlate)
 	}
 	h.number(v.Trip == nil)
 	if v.Trip != nil {
