@@ -435,29 +435,56 @@ func TestParse(t *testing.T) {
 		},
 		{
 			desc: "empty shapes file",
-			content: newZipBuilder().add(
+			content: newZipBuilderWithDefaults().add(
 				"shapes.txt",
-				"shape_id,shape_pt_lat,shape_pt_lon,shape_pt_sequence\n",
+				"shape_id,shape_pt_lat,shape_pt_lon,shape_pt_sequence",
+			).add(
+				"trips.txt",
+				"route_id,service_id,trip_id,shape_id",
+				"route_id,service_id,trip_id,shape_id",
 			).build(),
 			expected: &Static{
-				Shapes: []Shape{},
+				Agencies: []Agency{defaultAgency},
+				Routes:   []Route{defaultRoute},
+				Services: []Service{defaultService},
+				Stops:    []Stop{defaultStop},
+				Trips: []ScheduledTrip{
+					{
+						Route:   &defaultRoute,
+						Service: &defaultService,
+						ID:      "trip_id",
+					},
+				},
 			},
 		},
 		{
 			desc: "single point shape",
-			content: newZipBuilder().add(
+			content: newZipBuilderWithDefaults().add(
 				"shapes.txt",
-				"shape_id,shape_pt_lat,shape_pt_lon,shape_pt_sequence\n"+
-					"SHAPE_1,1.5,2.5,1\n",
+				"shape_id,shape_pt_lat,shape_pt_lon,shape_pt_sequence",
+				"shape_1,1.5,2.5,1",
+			).add(
+				"trips.txt",
+				"route_id,service_id,trip_id,shape_id",
+				"route_id,service_id,trip_id,shape_1",
 			).build(),
 			expected: &Static{
-				Shapes: []Shape{
+				Agencies: []Agency{defaultAgency},
+				Routes:   []Route{defaultRoute},
+				Services: []Service{defaultService},
+				Stops:    []Stop{defaultStop},
+				Trips: []ScheduledTrip{
 					{
-						ID: "SHAPE_1",
-						Points: []ShapePoint{
-							{
-								Latitude:  1.5,
-								Longitude: 2.5,
+						Route:   &defaultRoute,
+						Service: &defaultService,
+						ID:      "trip_id",
+						Shape: &Shape{
+							ID: "shape_1",
+							Points: []ShapePoint{
+								{
+									Latitude:  1.5,
+									Longitude: 2.5,
+								},
 							},
 						},
 					},
@@ -466,29 +493,42 @@ func TestParse(t *testing.T) {
 		},
 		{
 			desc: "multi point shape",
-			content: newZipBuilder().add(
+			content: newZipBuilderWithDefaults().add(
 				"shapes.txt",
-				"shape_id,shape_pt_lat,shape_pt_lon,shape_pt_sequence\n"+
-					"SHAPE_1,1.5,2.5,1\n",
-				"SHAPE_1,2.5,3.5,2\n",
-				"SHAPE_1,3.5,4.5,3\n",
+				"shape_id,shape_pt_lat,shape_pt_lon,shape_pt_sequence",
+				"shape_1,1.5,2.5,1",
+				"shape_1,2.5,3.5,2",
+				"shape_1,3.5,4.5,3",
+			).add(
+				"trips.txt",
+				"route_id,service_id,trip_id,shape_id",
+				"route_id,service_id,trip_id,shape_1",
 			).build(),
 			expected: &Static{
-				Shapes: []Shape{
+				Agencies: []Agency{defaultAgency},
+				Routes:   []Route{defaultRoute},
+				Services: []Service{defaultService},
+				Stops:    []Stop{defaultStop},
+				Trips: []ScheduledTrip{
 					{
-						ID: "SHAPE_1",
-						Points: []ShapePoint{
-							{
-								Latitude:  1.5,
-								Longitude: 2.5,
-							},
-							{
-								Latitude:  2.5,
-								Longitude: 3.5,
-							},
-							{
-								Latitude:  3.5,
-								Longitude: 4.5,
+						Route:   &defaultRoute,
+						Service: &defaultService,
+						ID:      "trip_id",
+						Shape: &Shape{
+							ID: "shape_1",
+							Points: []ShapePoint{
+								{
+									Latitude:  1.5,
+									Longitude: 2.5,
+								},
+								{
+									Latitude:  2.5,
+									Longitude: 3.5,
+								},
+								{
+									Latitude:  3.5,
+									Longitude: 4.5,
+								},
 							},
 						},
 					},
@@ -497,29 +537,42 @@ func TestParse(t *testing.T) {
 		},
 		{
 			desc: "points not in row order",
-			content: newZipBuilder().add(
+			content: newZipBuilderWithDefaults().add(
 				"shapes.txt",
-				"shape_id,shape_pt_lat,shape_pt_lon,shape_pt_sequence\n"+
-					"SHAPE_1,1.5,2.5,3\n",
-				"SHAPE_1,2.5,3.5,2\n",
-				"SHAPE_1,3.5,4.5,1\n",
+				"shape_id,shape_pt_lat,shape_pt_lon,shape_pt_sequence",
+				"shape_1,3.5,4.5,3",
+				"shape_1,2.5,3.5,2",
+				"shape_1,1.5,2.5,1",
+			).add(
+				"trips.txt",
+				"route_id,service_id,trip_id,shape_id",
+				"route_id,service_id,trip_id,shape_1",
 			).build(),
 			expected: &Static{
-				Shapes: []Shape{
+				Agencies: []Agency{defaultAgency},
+				Routes:   []Route{defaultRoute},
+				Services: []Service{defaultService},
+				Stops:    []Stop{defaultStop},
+				Trips: []ScheduledTrip{
 					{
-						ID: "SHAPE_1",
-						Points: []ShapePoint{
-							{
-								Latitude:  3.5,
-								Longitude: 4.5,
-							},
-							{
-								Latitude:  2.5,
-								Longitude: 3.5,
-							},
-							{
-								Latitude:  1.5,
-								Longitude: 2.5,
+						Route:   &defaultRoute,
+						Service: &defaultService,
+						ID:      "trip_id",
+						Shape: &Shape{
+							ID: "shape_1",
+							Points: []ShapePoint{
+								{
+									Latitude:  1.5,
+									Longitude: 2.5,
+								},
+								{
+									Latitude:  2.5,
+									Longitude: 3.5,
+								},
+								{
+									Latitude:  3.5,
+									Longitude: 4.5,
+								},
 							},
 						},
 					},
@@ -528,120 +581,86 @@ func TestParse(t *testing.T) {
 		},
 		{
 			desc: "multiple shapes",
-			content: newZipBuilder().add(
+			content: newZipBuilderWithDefaults().add(
 				"shapes.txt",
-				"shape_id,shape_pt_lat,shape_pt_lon,shape_pt_sequence\n"+
-					"SHAPE_1,1.5,2.5,1\n",
-				"SHAPE_1,2.5,3.5,2\n",
-				"SHAPE_1,3.5,4.5,3\n",
-				"SHAPE_2,4.5,5.5,1\n",
-				"SHAPE_2,5.5,6.5,2\n",
-				"SHAPE_3,6.5,7.5,1\n",
-				"SHAPE_3,7.5,8.5,2\n",
+				"shape_id,shape_pt_lat,shape_pt_lon,shape_pt_sequence",
+				"shape_1,1.5,2.5,1",
+				"shape_1,2.5,3.5,2",
+				"shape_1,3.5,4.5,3",
+				"shape_2,4.5,5.5,1",
+				"shape_2,5.5,6.5,2",
+			).add(
+				"trips.txt",
+				"route_id,service_id,trip_id,shape_id",
+				"route_id,service_id,trip_1,shape_1",
+				"route_id,service_id,trip_2,shape_2",
+				"route_id,service_id,trip_3,shape_1",
 			).build(),
 			expected: &Static{
-				Shapes: []Shape{
+				Agencies: []Agency{defaultAgency},
+				Routes:   []Route{defaultRoute},
+				Services: []Service{defaultService},
+				Stops:    []Stop{defaultStop},
+				Trips: []ScheduledTrip{
 					{
-						ID: "SHAPE_1",
-						Points: []ShapePoint{
-							{
-								Latitude:  1.5,
-								Longitude: 2.5,
-							},
-							{
-								Latitude:  2.5,
-								Longitude: 3.5,
-							},
-							{
-								Latitude:  3.5,
-								Longitude: 4.5,
+						Route:   &defaultRoute,
+						Service: &defaultService,
+						ID:      "trip_1",
+						Shape: &Shape{
+							ID: "shape_1",
+							Points: []ShapePoint{
+								{
+									Latitude:  1.5,
+									Longitude: 2.5,
+								},
+								{
+									Latitude:  2.5,
+									Longitude: 3.5,
+								},
+								{
+									Latitude:  3.5,
+									Longitude: 4.5,
+								},
 							},
 						},
 					},
 					{
-						ID: "SHAPE_2",
-						Points: []ShapePoint{
-							{
-								Latitude:  4.5,
-								Longitude: 5.5,
-							},
-							{
-								Latitude:  5.5,
-								Longitude: 6.5,
-							},
-						},
-					},
-					{
-						ID: "SHAPE_3",
-						Points: []ShapePoint{
-							{
-								Latitude:  6.5,
-								Longitude: 7.5,
-							},
-							{
-								Latitude:  7.5,
-								Longitude: 8.5,
-							},
-						},
-					},
-				},
-			},
-		},
-		{
-			desc: "multiple shapes, random order",
-			content: newZipBuilder().add(
-				"shapes.txt",
-				"shape_id,shape_pt_lat,shape_pt_lon,shape_pt_sequence\n"+
-					"SHAPE_3,7.5,8.5,2\n",
-				"SHAPE_1,2.5,3.5,2\n",
-				"SHAPE_2,5.5,6.5,2\n",
-				"SHAPE_1,3.5,4.5,3\n",
-				"SHAPE_2,4.5,5.5,1\n",
-				"SHAPE_1,1.5,2.5,1\n",
-				"SHAPE_3,6.5,7.5,1\n",
-			).build(),
-			expected: &Static{
-				Shapes: []Shape{
-					{
-						ID: "SHAPE_1",
-						Points: []ShapePoint{
-							{
-								Latitude:  1.5,
-								Longitude: 2.5,
-							},
-							{
-								Latitude:  2.5,
-								Longitude: 3.5,
-							},
-							{
-								Latitude:  3.5,
-								Longitude: 4.5,
+						Route:   &defaultRoute,
+						Service: &defaultService,
+						ID:      "trip_2",
+						Shape: &Shape{
+							ID: "shape_2",
+							Points: []ShapePoint{
+								{
+									Latitude:  4.5,
+									Longitude: 5.5,
+								},
+								{
+									Latitude:  5.5,
+									Longitude: 6.5,
+								},
 							},
 						},
 					},
 					{
-						ID: "SHAPE_2",
-						Points: []ShapePoint{
-							{
-								Latitude:  4.5,
-								Longitude: 5.5,
-							},
-							{
-								Latitude:  5.5,
-								Longitude: 6.5,
-							},
-						},
-					},
-					{
-						ID: "SHAPE_3",
-						Points: []ShapePoint{
-							{
-								Latitude:  6.5,
-								Longitude: 7.5,
-							},
-							{
-								Latitude:  7.5,
-								Longitude: 8.5,
+						Route:   &defaultRoute,
+						Service: &defaultService,
+						ID:      "trip_3",
+						Shape: &Shape{
+							ID: "shape_1",
+							Points: []ShapePoint{
+								{
+									Latitude:  1.5,
+									Longitude: 2.5,
+								},
+								{
+									Latitude:  2.5,
+									Longitude: 3.5,
+								},
+								{
+									Latitude:  3.5,
+									Longitude: 4.5,
+								},
 							},
 						},
 					},
@@ -650,31 +669,44 @@ func TestParse(t *testing.T) {
 		},
 		{
 			desc: "shape dist traveled",
-			content: newZipBuilder().add(
+			content: newZipBuilderWithDefaults().add(
 				"shapes.txt",
-				"shape_id,shape_pt_lat,shape_pt_lon,shape_pt_sequence,shape_dist_traveled\n"+
-					"SHAPE_1,1.5,2.5,1,0\n",
-				"SHAPE_1,2.5,3.5,2,\n",
-				"SHAPE_1,3.5,4.5,3,20\n",
+				"shape_id,shape_pt_lat,shape_pt_lon,shape_pt_sequence,shape_dist_traveled",
+				"shape_1,1.5,2.5,1,0",
+				"shape_1,2.5,3.5,2,",
+				"shape_1,3.5,4.5,3,20",
+			).add(
+				"trips.txt",
+				"route_id,service_id,trip_id,shape_id",
+				"route_id,service_id,trip_1,shape_1",
 			).build(),
 			expected: &Static{
-				Shapes: []Shape{
+				Agencies: []Agency{defaultAgency},
+				Routes:   []Route{defaultRoute},
+				Services: []Service{defaultService},
+				Stops:    []Stop{defaultStop},
+				Trips: []ScheduledTrip{
 					{
-						ID: "SHAPE_1",
-						Points: []ShapePoint{
-							{
-								Latitude:  1.5,
-								Longitude: 2.5,
-								Distance:  ptr(float64(0)),
-							},
-							{
-								Latitude:  2.5,
-								Longitude: 3.5,
-							},
-							{
-								Latitude:  3.5,
-								Longitude: 4.5,
-								Distance:  ptr(float64(20)),
+						Route:   &defaultRoute,
+						Service: &defaultService,
+						ID:      "trip_1",
+						Shape: &Shape{
+							ID: "shape_1",
+							Points: []ShapePoint{
+								{
+									Latitude:  1.5,
+									Longitude: 2.5,
+									Distance:  ptr(float64(0)),
+								},
+								{
+									Latitude:  2.5,
+									Longitude: 3.5,
+								},
+								{
+									Latitude:  3.5,
+									Longitude: 4.5,
+									Distance:  ptr(float64(20)),
+								},
 							},
 						},
 					},
@@ -711,6 +743,27 @@ func newZipBuilder() *zipBuilder {
 		"trips.txt", "route_id,service_id,trip_id",
 	).add(
 		"stop_times.txt", "stop_id,trip_id,stop_sequence",
+	)
+}
+
+func newZipBuilderWithDefaults() *zipBuilder {
+	return newZipBuilder().add(
+		"agency.txt",
+		"agency_id,agency_name,agency_url,agency_timezone\na,b,c,d",
+	).add(
+		"routes.txt",
+		"route_id,route_type\nroute_id,3",
+	).add(
+		"stops.txt",
+		"stop_id\nstop_id",
+	).add(
+		"calendar.txt",
+		"service_id,monday,tuesday,wednesday,thursday,friday,saturday,sunday,start_date,end_date\n"+
+			"service_id,0,0,0,0,0,0,0,20220504,20220507",
+	).add(
+		"stop_times.txt",
+		"stop_id,trip_id,arrival_time,departure_time,stop_sequence,stop_headsign\n"+
+			"stop_id,a,04:05:06,13:14:15,50,b",
 	)
 }
 

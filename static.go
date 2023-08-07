@@ -23,7 +23,6 @@ type Static struct {
 	Transfers []Transfer
 	Services  []Service
 	Trips     []ScheduledTrip
-	Shapes    []Shape
 }
 
 // Agency corresponds to a single row in the agency.txt file.
@@ -342,6 +341,7 @@ type ScheduledTrip struct {
 	WheelchairAccessible *bool
 	BikesAllowed         *bool
 	StopTimes            []ScheduledStopTime
+	Shape                *Shape
 }
 
 type ScheduledStopTime struct {
@@ -398,6 +398,7 @@ func ParseStatic(content []byte, opts ParseStaticOptions) (*Static, error) {
 	}
 	serviceIdToService := map[string]Service{}
 	timezone := time.UTC
+	var shapeIDToShape map[string]*Shape
 	for _, table := range []struct {
 		File     string
 		Action   func(file *csv.File)
@@ -459,9 +460,16 @@ func ParseStatic(content []byte, opts ParseStaticOptions) (*Static, error) {
 			Optional: true,
 		},
 		{
+			File: "shapes.txt",
+			Action: func(file *csv.File) {
+				shapeIDToShape = parseShapes(file)
+			},
+			Optional: true,
+		},
+		{
 			File: "trips.txt",
 			Action: func(file *csv.File) {
-				result.Trips = parseScheduledTrips(file, result.Routes, result.Services)
+				result.Trips = parseScheduledTrips(file, result.Routes, result.Services, shapeIDToShape)
 			},
 		},
 		{
@@ -469,13 +477,6 @@ func ParseStatic(content []byte, opts ParseStaticOptions) (*Static, error) {
 			Action: func(file *csv.File) {
 				parseScheduledStopTimes(file, result.Stops, result.Trips)
 			},
-		},
-		{
-			File: "shapes.txt",
-			Action: func(file *csv.File) {
-				result.Shapes = parseShapes(file)
-			},
-			Optional: true,
 		},
 	} {
 		zipFile := fileNameToFile[table.File]
@@ -912,7 +913,7 @@ func parseTime(s string, timezone *time.Location) (time.Time, error) {
 	return time.ParseInLocation("20060102", s, timezone)
 }
 
-func parseScheduledTrips(csv *csv.File, routes []Route, services []Service) []ScheduledTrip {
+func parseScheduledTrips(csv *csv.File, routes []Route, services []Service, shapeIDToShape map[string]*Shape) []ScheduledTrip {
 	routeIDColumn := csv.RequiredColumn("route_id")
 	serviceIDColumn := csv.RequiredColumn("service_id")
 	tripIDColumn := csv.RequiredColumn("trip_id")
@@ -921,6 +922,7 @@ func parseScheduledTrips(csv *csv.File, routes []Route, services []Service) []Sc
 	directionIDColumn := csv.OptionalColumn("direction_id")
 	wheelchairAccessibleColumn := csv.OptionalColumn("wheelchair_accessible")
 	bikesAllowedColumn := csv.OptionalColumn("bikes_allowed")
+	shapeIDColumn := csv.OptionalColumn("shape_id")
 
 	if err := csv.MissingRequiredColumns(); err != nil {
 		fmt.Println(err)
@@ -947,14 +949,26 @@ func parseScheduledTrips(csv *csv.File, routes []Route, services []Service) []Sc
 			WheelchairAccessible: parseOptionalBool(wheelchairAccessibleColumn.Read(), "1", "2"),
 			BikesAllowed:         parseOptionalBool(bikesAllowedColumn.Read(), "1", "2"),
 		}
+
+		shapeIDOrNil := shapeIDColumn.Read()
+		if shapeIDOrNil != nil {
+			if shape, ok := shapeIDToShape[*shapeIDOrNil]; ok {
+				trip.Shape = shape
+			} else {
+				log.Printf("Shape %s not found for trip %s", *shapeIDOrNil, trip.ID)
+			}
+		}
+
 		if missingKeys := csv.MissingRowKeys(); len(missingKeys) > 0 {
 			log.Printf("Skipping trip because of missing keys %s", missingKeys)
 			continue
 		}
 		if trip.Route == nil {
+			log.Print("Skipping trip because of missing route")
 			continue
 		}
 		if trip.Service == nil {
+			log.Print("Skipping trip because of missing service")
 			continue
 		}
 		trips = append(trips, trip)
@@ -1082,7 +1096,7 @@ type ShapeRow struct {
 	ShapeDistTraveled *float64
 }
 
-func parseShapes(csv *csv.File) []Shape {
+func parseShapes(csv *csv.File) map[string]*Shape {
 	if csv == nil {
 		return nil
 	}
@@ -1117,7 +1131,7 @@ func parseShapes(csv *csv.File) []Shape {
 		})
 	}
 
-	shapes := make([]Shape, 0, len(shapeIDToRowData))
+	shapeIDToShape := map[string]*Shape{}
 	for shapeID, rows := range shapeIDToRowData {
 		// Sort the rows by sequence number
 		sort.Slice(rows, func(i, j int) bool {
@@ -1133,18 +1147,13 @@ func parseShapes(csv *csv.File) []Shape {
 			})
 		}
 
-		shapes = append(shapes, Shape{
+		shapeIDToShape[shapeID] = &Shape{
 			ID:     shapeID,
 			Points: points,
-		})
+		}
 	}
 
-	// Sort the shapes by ID
-	sort.Slice(shapes, func(i, j int) bool {
-		return shapes[i].ID < shapes[j].ID
-	})
-
-	return shapes
+	return shapeIDToShape
 }
 
 func ptr[T any](t T) *T {
