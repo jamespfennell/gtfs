@@ -23,6 +23,7 @@ type Static struct {
 	Transfers []Transfer
 	Services  []Service
 	Trips     []ScheduledTrip
+	Shapes    []Shape
 }
 
 // Agency corresponds to a single row in the agency.txt file.
@@ -397,8 +398,8 @@ func ParseStatic(content []byte, opts ParseStaticOptions) (*Static, error) {
 		fileNameToFile[file.Name] = file
 	}
 	serviceIdToService := map[string]Service{}
+	shapeIdToShape := map[string]*Shape{}
 	timezone := time.UTC
-	var shapeIDToShape map[string]*Shape
 	for _, table := range []struct {
 		File     string
 		Action   func(file *csv.File)
@@ -462,14 +463,14 @@ func ParseStatic(content []byte, opts ParseStaticOptions) (*Static, error) {
 		{
 			File: "shapes.txt",
 			Action: func(file *csv.File) {
-				shapeIDToShape = parseShapes(file)
+				result.Shapes = parseShapes(file, shapeIdToShape)
 			},
 			Optional: true,
 		},
 		{
 			File: "trips.txt",
 			Action: func(file *csv.File) {
-				result.Trips = parseScheduledTrips(file, result.Routes, result.Services, shapeIDToShape)
+				result.Trips = parseScheduledTrips(file, result.Routes, result.Services, shapeIdToShape)
 			},
 		},
 		{
@@ -1096,7 +1097,7 @@ type ShapeRow struct {
 	ShapeDistTraveled *float64
 }
 
-func parseShapes(csv *csv.File) map[string]*Shape {
+func parseShapes(csv *csv.File, shapeIDToShape map[string]*Shape) []Shape {
 	if csv == nil {
 		return nil
 	}
@@ -1131,7 +1132,7 @@ func parseShapes(csv *csv.File) map[string]*Shape {
 		})
 	}
 
-	shapeIDToShape := map[string]*Shape{}
+	shapes := make([]Shape, 0, len(shapeIDToRowData))
 	for shapeID, rows := range shapeIDToRowData {
 		// Sort the rows by sequence number
 		sort.Slice(rows, func(i, j int) bool {
@@ -1147,13 +1148,21 @@ func parseShapes(csv *csv.File) map[string]*Shape {
 			})
 		}
 
-		shapeIDToShape[shapeID] = &Shape{
+		shape := &Shape{
 			ID:     shapeID,
 			Points: points,
 		}
+
+		shapes = append(shapes, *shape)
+		shapeIDToShape[shapeID] = shape
 	}
 
-	return shapeIDToShape
+	// Sort the shapes by ID
+	sort.Slice(shapes, func(i, j int) bool {
+		return shapes[i].ID < shapes[j].ID
+	})
+
+	return shapes
 }
 
 func ptr[T any](t T) *T {

@@ -455,6 +455,7 @@ func TestParse(t *testing.T) {
 						ID:      "trip_id",
 					},
 				},
+				Shapes: []Shape{},
 			},
 		},
 		{
@@ -485,6 +486,17 @@ func TestParse(t *testing.T) {
 									Latitude:  1.5,
 									Longitude: 2.5,
 								},
+							},
+						},
+					},
+				},
+				Shapes: []Shape{
+					{
+						ID: "shape_1",
+						Points: []ShapePoint{
+							{
+								Latitude:  1.5,
+								Longitude: 2.5,
 							},
 						},
 					},
@@ -533,6 +545,25 @@ func TestParse(t *testing.T) {
 						},
 					},
 				},
+				Shapes: []Shape{
+					{
+						ID: "shape_1",
+						Points: []ShapePoint{
+							{
+								Latitude:  1.5,
+								Longitude: 2.5,
+							},
+							{
+								Latitude:  2.5,
+								Longitude: 3.5,
+							},
+							{
+								Latitude:  3.5,
+								Longitude: 4.5,
+							},
+						},
+					},
+				},
 			},
 		},
 		{
@@ -573,6 +604,25 @@ func TestParse(t *testing.T) {
 									Latitude:  3.5,
 									Longitude: 4.5,
 								},
+							},
+						},
+					},
+				},
+				Shapes: []Shape{
+					{
+						ID: "shape_1",
+						Points: []ShapePoint{
+							{
+								Latitude:  1.5,
+								Longitude: 2.5,
+							},
+							{
+								Latitude:  2.5,
+								Longitude: 3.5,
+							},
+							{
+								Latitude:  3.5,
+								Longitude: 4.5,
 							},
 						},
 					},
@@ -665,6 +715,38 @@ func TestParse(t *testing.T) {
 						},
 					},
 				},
+				Shapes: []Shape{
+					{
+						ID: "shape_1",
+						Points: []ShapePoint{
+							{
+								Latitude:  1.5,
+								Longitude: 2.5,
+							},
+							{
+								Latitude:  2.5,
+								Longitude: 3.5,
+							},
+							{
+								Latitude:  3.5,
+								Longitude: 4.5,
+							},
+						},
+					},
+					{
+						ID: "shape_2",
+						Points: []ShapePoint{
+							{
+								Latitude:  4.5,
+								Longitude: 5.5,
+							},
+							{
+								Latitude:  5.5,
+								Longitude: 6.5,
+							},
+						},
+					},
+				},
 			},
 		},
 		{
@@ -707,6 +789,27 @@ func TestParse(t *testing.T) {
 									Longitude: 4.5,
 									Distance:  ptr(float64(20)),
 								},
+							},
+						},
+					},
+				},
+				Shapes: []Shape{
+					{
+						ID: "shape_1",
+						Points: []ShapePoint{
+							{
+								Latitude:  1.5,
+								Longitude: 2.5,
+								Distance:  ptr(float64(0)),
+							},
+							{
+								Latitude:  2.5,
+								Longitude: 3.5,
+							},
+							{
+								Latitude:  3.5,
+								Longitude: 4.5,
+								Distance:  ptr(float64(20)),
 							},
 						},
 					},
