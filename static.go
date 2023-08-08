@@ -23,6 +23,7 @@ type Static struct {
 	Transfers []Transfer
 	Services  []Service
 	Trips     []ScheduledTrip
+	Shapes    []Shape
 }
 
 // Agency corresponds to a single row in the agency.txt file.
@@ -341,6 +342,7 @@ type ScheduledTrip struct {
 	WheelchairAccessible *bool
 	BikesAllowed         *bool
 	StopTimes            []ScheduledStopTime
+	Shape                *Shape
 }
 
 type ScheduledStopTime struct {
@@ -350,6 +352,17 @@ type ScheduledStopTime struct {
 	DepartureTime time.Duration
 	StopSequence  int
 	Headsign      *string
+}
+
+type ShapePoint struct {
+	Latitude  float64
+	Longitude float64
+	Distance  *float64
+}
+
+type Shape struct {
+	ID     string
+	Points []ShapePoint
 }
 
 // SortScheduledStopTimes sorts the provided stop times based on the stop sequence field.
@@ -385,6 +398,7 @@ func ParseStatic(content []byte, opts ParseStaticOptions) (*Static, error) {
 		fileNameToFile[file.Name] = file
 	}
 	serviceIdToService := map[string]Service{}
+	shapeIdToShape := map[string]*Shape{}
 	timezone := time.UTC
 	for _, table := range []struct {
 		File     string
@@ -447,9 +461,16 @@ func ParseStatic(content []byte, opts ParseStaticOptions) (*Static, error) {
 			Optional: true,
 		},
 		{
+			File: "shapes.txt",
+			Action: func(file *csv.File) {
+				result.Shapes = parseShapes(file, shapeIdToShape)
+			},
+			Optional: true,
+		},
+		{
 			File: "trips.txt",
 			Action: func(file *csv.File) {
-				result.Trips = parseScheduledTrips(file, result.Routes, result.Services)
+				result.Trips = parseScheduledTrips(file, result.Routes, result.Services, shapeIdToShape)
 			},
 		},
 		{
@@ -893,7 +914,7 @@ func parseTime(s string, timezone *time.Location) (time.Time, error) {
 	return time.ParseInLocation("20060102", s, timezone)
 }
 
-func parseScheduledTrips(csv *csv.File, routes []Route, services []Service) []ScheduledTrip {
+func parseScheduledTrips(csv *csv.File, routes []Route, services []Service, shapeIDToShape map[string]*Shape) []ScheduledTrip {
 	routeIDColumn := csv.RequiredColumn("route_id")
 	serviceIDColumn := csv.RequiredColumn("service_id")
 	tripIDColumn := csv.RequiredColumn("trip_id")
@@ -902,6 +923,7 @@ func parseScheduledTrips(csv *csv.File, routes []Route, services []Service) []Sc
 	directionIDColumn := csv.OptionalColumn("direction_id")
 	wheelchairAccessibleColumn := csv.OptionalColumn("wheelchair_accessible")
 	bikesAllowedColumn := csv.OptionalColumn("bikes_allowed")
+	shapeIDColumn := csv.OptionalColumn("shape_id")
 
 	if err := csv.MissingRequiredColumns(); err != nil {
 		fmt.Println(err)
@@ -928,14 +950,26 @@ func parseScheduledTrips(csv *csv.File, routes []Route, services []Service) []Sc
 			WheelchairAccessible: parseOptionalBool(wheelchairAccessibleColumn.Read(), "1", "2"),
 			BikesAllowed:         parseOptionalBool(bikesAllowedColumn.Read(), "1", "2"),
 		}
+
+		shapeIDOrNil := shapeIDColumn.Read()
+		if shapeIDOrNil != nil {
+			if shape, ok := shapeIDToShape[*shapeIDOrNil]; ok {
+				trip.Shape = shape
+			} else {
+				log.Printf("Shape %s not found for trip %s", *shapeIDOrNil, trip.ID)
+			}
+		}
+
 		if missingKeys := csv.MissingRowKeys(); len(missingKeys) > 0 {
 			log.Printf("Skipping trip because of missing keys %s", missingKeys)
 			continue
 		}
 		if trip.Route == nil {
+			log.Print("Skipping trip because of missing route")
 			continue
 		}
 		if trip.Service == nil {
+			log.Print("Skipping trip because of missing service")
 			continue
 		}
 		trips = append(trips, trip)
@@ -1054,4 +1088,83 @@ func parseStopTimeDuration(s *string) (time.Duration, bool) {
 	minutes := pieces[1]
 	seconds := pieces[2]
 	return time.Duration((hours*60+minutes)*60+seconds) * time.Second, true
+}
+
+type ShapeRow struct {
+	ShapePtLat        float64
+	ShapePtLon        float64
+	ShapePtSequence   int32
+	ShapeDistTraveled *float64
+}
+
+func parseShapes(csv *csv.File, shapeIDToShape map[string]*Shape) []Shape {
+	if csv == nil {
+		return nil
+	}
+
+	shapeIDColumn := csv.RequiredColumn("shape_id")
+	shapePtLatColumn := csv.RequiredColumn("shape_pt_lat")
+	shapePtLonColumn := csv.RequiredColumn("shape_pt_lon")
+	shapePtSequenceColumn := csv.RequiredColumn("shape_pt_sequence")
+	shapeDistTraveled := csv.OptionalColumn("shape_dist_traveled")
+
+	if err := csv.MissingRequiredColumns(); err != nil {
+		fmt.Println(err)
+		return nil
+	}
+
+	shapeIDToRowData := map[string][]ShapeRow{}
+	for csv.NextRow() {
+		shapeID := shapeIDColumn.Read()
+		shapePtLat := parseFloat64(ptr(shapePtLatColumn.Read()))
+		shapePtLon := parseFloat64(ptr(shapePtLonColumn.Read()))
+		shapePtSequence := parseInt32(ptr(shapePtSequenceColumn.Read()))
+		shapeDistTraveled := parseFloat64(shapeDistTraveled.Read())
+		if shapeID == "" || shapePtLat == nil || shapePtLon == nil || shapePtSequence == nil {
+			continue
+		}
+
+		shapeIDToRowData[shapeID] = append(shapeIDToRowData[shapeID], ShapeRow{
+			ShapePtLat:        *shapePtLat,
+			ShapePtLon:        *shapePtLon,
+			ShapePtSequence:   *shapePtSequence,
+			ShapeDistTraveled: shapeDistTraveled,
+		})
+	}
+
+	shapes := make([]Shape, 0, len(shapeIDToRowData))
+	for shapeID, rows := range shapeIDToRowData {
+		// Sort the rows by sequence number
+		sort.Slice(rows, func(i, j int) bool {
+			return rows[i].ShapePtSequence < rows[j].ShapePtSequence
+		})
+
+		points := make([]ShapePoint, 0, len(rows))
+		for _, row := range rows {
+			points = append(points, ShapePoint{
+				Latitude:  row.ShapePtLat,
+				Longitude: row.ShapePtLon,
+				Distance:  row.ShapeDistTraveled,
+			})
+		}
+
+		shape := &Shape{
+			ID:     shapeID,
+			Points: points,
+		}
+
+		shapes = append(shapes, *shape)
+		shapeIDToShape[shapeID] = shape
+	}
+
+	// Sort the shapes by ID
+	sort.Slice(shapes, func(i, j int) bool {
+		return shapes[i].ID < shapes[j].ID
+	})
+
+	return shapes
+}
+
+func ptr[T any](t T) *T {
+	return &t
 }
