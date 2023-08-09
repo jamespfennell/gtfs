@@ -4,10 +4,11 @@ import (
 	"archive/zip"
 	"bytes"
 	"io"
-	"reflect"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/google/go-cmp/cmp"
 )
 
 var (
@@ -29,11 +30,13 @@ func TestParse(t *testing.T) {
 		Timezone: "h",
 	}
 	defaultRoute := Route{
-		Id:        "route_id",
-		Agency:    &defaultAgency,
-		Color:     "FFFFFF",
-		TextColor: "000000",
-		Type:      Bus,
+		Id:                "route_id",
+		Agency:            &defaultAgency,
+		Color:             "FFFFFF",
+		TextColor:         "000000",
+		Type:              Bus,
+		ContinuousPickup:  PickupDropOffPolicy_No,
+		ContinuousDropOff: PickupDropOffPolicy_No,
 	}
 	defaultStop := Stop{
 		Id: "stop_id",
@@ -105,11 +108,13 @@ func TestParse(t *testing.T) {
 				Agencies: []Agency{defaultAgency},
 				Routes: []Route{
 					{
-						Id:        "a",
-						Agency:    &defaultAgency,
-						Color:     "FFFFFF",
-						TextColor: "000000",
-						Type:      Bus,
+						Id:                "a",
+						Agency:            &defaultAgency,
+						Color:             "FFFFFF",
+						TextColor:         "000000",
+						Type:              Bus,
+						ContinuousPickup:  PickupDropOffPolicy_No,
+						ContinuousDropOff: PickupDropOffPolicy_No,
 					},
 				},
 			},
@@ -122,7 +127,7 @@ func TestParse(t *testing.T) {
 			).add(
 				"routes.txt",
 				"route_id,route_color,route_text_color,route_short_name,"+
-					"route_long_name,route_desc,route_type,route_url,route_sort_order,continuous_pickup,continuous_dropoff\n"+
+					"route_long_name,route_desc,route_type,route_url,route_sort_order,continuous_pickup,continuous_drop_off\n"+
 					"a,b,c,e,f,g,2,h,5,0,2",
 			).build(),
 			expected: &Static{
@@ -138,9 +143,9 @@ func TestParse(t *testing.T) {
 						Description:       ptr("g"),
 						Type:              Rail,
 						Url:               ptr("h"),
-						SortOrder:         intPtr(5),
-						ContinuousPickup:  Continuous,
-						ContinuousDropOff: PhoneAgency,
+						SortOrder:         ptr(int32(5)),
+						ContinuousPickup:  PickupDropOffPolicy_Yes,
+						ContinuousDropOff: PickupDropOffPolicy_PhoneAgency,
 					},
 				},
 			},
@@ -158,11 +163,13 @@ func TestParse(t *testing.T) {
 				Agencies: []Agency{defaultAgency, otherAgency},
 				Routes: []Route{
 					{
-						Id:        "a",
-						Agency:    &otherAgency,
-						Color:     "FFFFFF",
-						TextColor: "000000",
-						Type:      Bus,
+						Id:                "a",
+						Agency:            &otherAgency,
+						Color:             "FFFFFF",
+						TextColor:         "000000",
+						Type:              Bus,
+						ContinuousPickup:  PickupDropOffPolicy_No,
+						ContinuousDropOff: PickupDropOffPolicy_No,
 					},
 				},
 			},
@@ -184,8 +191,8 @@ func TestParse(t *testing.T) {
 						Name:               ptr("c"),
 						Description:        ptr("d"),
 						ZoneId:             ptr("e"),
-						Longitude:          floatPtr(1.5),
-						Latitude:           floatPtr(2.5),
+						Longitude:          ptr(1.5),
+						Latitude:           ptr(2.5),
 						Url:                ptr("f"),
 						Type:               Station,
 						Timezone:           ptr("g"),
@@ -198,8 +205,8 @@ func TestParse(t *testing.T) {
 						Name:               ptr("k"),
 						Description:        ptr("l"),
 						ZoneId:             ptr("m"),
-						Longitude:          floatPtr(1.5),
-						Latitude:           floatPtr(2.5),
+						Longitude:          ptr(1.5),
+						Latitude:           ptr(2.5),
 						Url:                ptr("n"),
 						Type:               Station,
 						Timezone:           ptr("o"),
@@ -246,7 +253,7 @@ func TestParse(t *testing.T) {
 						From:            &Stop{Id: "a"},
 						To:              &Stop{Id: "b"},
 						Type:            RequiresTime,
-						MinTransferTime: intPtr(300),
+						MinTransferTime: ptr(int32(300)),
 					},
 				},
 			},
@@ -349,12 +356,12 @@ func TestParse(t *testing.T) {
 					"service_id,0,0,0,0,0,0,0,20220504,20220507",
 			).add(
 				"trips.txt",
-				"route_id,service_id,trip_id,trip_headsign,trip_short_name,direction_id,wheelchair_accessible,bikes_allowed\n"+
-					"route_id,service_id,a,b,c,1,0,2",
+				"route_id,service_id,trip_id,trip_headsign,trip_short_name,direction_id,block_id,wheelchair_accessible,bikes_allowed\n"+
+					"route_id,service_id,a,b,c,1,block_id,0,2",
 			).add(
 				"stop_times.txt",
-				"stop_id,trip_id,arrival_time,departure_time,stop_sequence,stop_headsign\n"+
-					"stop_id,a,04:05:06,13:14:15,50,b",
+				"stop_id,trip_id,arrival_time,departure_time,stop_sequence,stop_headsign,pickup_type,drop_off_type,continuous_pickup,continuous_drop_off,shape_dist_traveled,timepoint\n"+
+					"stop_id,a,04:05:06,13:14:15,50,b,0,1,2,3,0.25,1",
 			).build(),
 			expected: &Static{
 				Agencies: []Agency{defaultAgency},
@@ -368,16 +375,23 @@ func TestParse(t *testing.T) {
 						ID:                   "a",
 						Headsign:             ptr("b"),
 						ShortName:            ptr("c"),
-						DirectionId:          boolPtr(true),
-						WheelchairAccessible: nil,
-						BikesAllowed:         boolPtr(false),
+						DirectionId:          DirectionIDTrue,
+						BlockID:              ptr("block_id"),
+						WheelchairAccessible: NotSpecified,
+						BikesAllowed:         BikesAllowed_NotAllowed,
 						StopTimes: []ScheduledStopTime{
 							{
-								Stop:          &defaultStop,
-								Headsign:      ptr("b"),
-								StopSequence:  50,
-								ArrivalTime:   4*time.Hour + 5*time.Minute + 6*time.Second,
-								DepartureTime: 13*time.Hour + 14*time.Minute + 15*time.Second,
+								Stop:                  &defaultStop,
+								Headsign:              ptr("b"),
+								StopSequence:          50,
+								ArrivalTime:           4*time.Hour + 5*time.Minute + 6*time.Second,
+								DepartureTime:         13*time.Hour + 14*time.Minute + 15*time.Second,
+								PickupType:            PickupDropOffPolicy_Yes,
+								DropOffType:           PickupDropOffPolicy_No,
+								ContinuousPickup:      PickupDropOffPolicy_PhoneAgency,
+								ContinuousDropOff:     PickupDropOffPolicy_CoordinateWithDriver,
+								ShapeDistanceTraveled: ptr(0.25),
+								ExactTimes:            true,
 							},
 						},
 					},
@@ -400,8 +414,8 @@ func TestParse(t *testing.T) {
 						Name:               ptr("c"),
 						Description:        ptr("d"),
 						ZoneId:             ptr("e"),
-						Longitude:          floatPtr(1.5),
-						Latitude:           floatPtr(2.5),
+						Longitude:          ptr(1.5),
+						Latitude:           ptr(2.5),
 						Url:                ptr("f"),
 						Type:               Station,
 						Timezone:           ptr("g"),
@@ -427,8 +441,8 @@ func TestParse(t *testing.T) {
 						Name:               ptr("c"),
 						Description:        ptr("d"),
 						ZoneId:             ptr("e"),
-						Longitude:          floatPtr(1.5),
-						Latitude:           floatPtr(2.5),
+						Longitude:          ptr(1.5),
+						Latitude:           ptr(2.5),
 						Url:                ptr("f"),
 						Type:               Station,
 						Timezone:           ptr("g"),
@@ -1002,8 +1016,8 @@ func TestParse(t *testing.T) {
 			if err != nil {
 				t.Errorf("error when parsing: %s", err)
 			}
-			if !reflect.DeepEqual(actual, tc.expected) {
-				t.Errorf("not the same: \n%+v != \n%+v", actual, tc.expected)
+			if diff := cmp.Diff(actual, tc.expected); diff != "" {
+				t.Errorf("not the same: \n%+v != \n%+v\ndiff:%s", actual, tc.expected, diff)
 			}
 		})
 	}
@@ -1073,16 +1087,4 @@ func (z *zipBuilder) build() []byte {
 		panic(err)
 	}
 	return b.Bytes()
-}
-
-func intPtr(i int32) *int32 {
-	return &i
-}
-
-func floatPtr(f float64) *float64 {
-	return &f
-}
-
-func boolPtr(b bool) *bool {
-	return &b
 }

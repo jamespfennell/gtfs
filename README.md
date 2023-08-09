@@ -20,6 +20,11 @@ This post-processing does useful things like:
 
 - Implements business logic to map data in various GTFS realtime extensions to regular GTFS realtime fields.
 
+**Backwards compatibility warning**:
+    this package is under active development and backwards incompatible changes are frequently made.
+We're eventually planning to release a `v1.0.0` version, and after that all changes
+    will be backwards compatible and consistent with semantic versioning.
+
 ## Examples
 
 Parse the GTFS static feed for the New York City Subway:

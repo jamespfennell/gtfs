@@ -5,7 +5,8 @@
 This directory contains a performance profiler for the package, in `profiler.go`.
 It currently only works with GTFS static files.
 
-The following is reasonable chain of commands to run a profile and then view the results in the browser.
+The following is reasonable chain of commands to create a profile and then view the results in the browser.
+Run it from the repo root.
 It assumes that the [pprof CLI tool](https://github.com/google/pprof) is installed (`go install github.com/google/pprof@latest`).
 
 ```
