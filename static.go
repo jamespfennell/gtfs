@@ -343,6 +343,7 @@ type ScheduledTrip struct {
 	BikesAllowed         *bool
 	StopTimes            []ScheduledStopTime
 	Shape                *Shape
+	Frequencies          []Frequency
 }
 
 type ScheduledStopTime struct {
@@ -363,6 +364,42 @@ type ShapePoint struct {
 type Shape struct {
 	ID     string
 	Points []ShapePoint
+}
+
+type ExactTimes int32
+
+const (
+	FrequencyBased ExactTimes = 0
+	ScheduleBased  ExactTimes = 1
+)
+
+func NewExactTimes(i int) ExactTimes {
+	switch i {
+	case 1:
+		return ScheduleBased
+	case 0:
+		fallthrough
+	default:
+		return FrequencyBased
+	}
+}
+
+func (t ExactTimes) String() string {
+	switch t {
+	case ScheduleBased:
+		return "SCHEDULE_BASED"
+	case FrequencyBased:
+		fallthrough
+	default:
+		return "FREQUENCY_BASED"
+	}
+}
+
+type Frequency struct {
+	StartTime  time.Duration
+	EndTime    time.Duration
+	Headway    time.Duration
+	ExactTimes ExactTimes
 }
 
 // SortScheduledStopTimes sorts the provided stop times based on the stop sequence field.
@@ -399,6 +436,7 @@ func ParseStatic(content []byte, opts ParseStaticOptions) (*Static, error) {
 	}
 	serviceIdToService := map[string]Service{}
 	shapeIdToShape := map[string]*Shape{}
+	tripIdToScheduledTrip := map[string]*ScheduledTrip{}
 	timezone := time.UTC
 	for _, table := range []struct {
 		File     string
@@ -463,7 +501,10 @@ func ParseStatic(content []byte, opts ParseStaticOptions) (*Static, error) {
 		{
 			File: "shapes.txt",
 			Action: func(file *csv.File) {
-				result.Shapes = parseShapes(file, shapeIdToShape)
+				result.Shapes = parseShapes(file)
+				for idx, shape := range result.Shapes {
+					shapeIdToShape[shape.ID] = &result.Shapes[idx]
+				}
 			},
 			Optional: true,
 		},
@@ -471,7 +512,17 @@ func ParseStatic(content []byte, opts ParseStaticOptions) (*Static, error) {
 			File: "trips.txt",
 			Action: func(file *csv.File) {
 				result.Trips = parseScheduledTrips(file, result.Routes, result.Services, shapeIdToShape)
+				for idx, trip := range result.Trips {
+					tripIdToScheduledTrip[trip.ID] = &result.Trips[idx]
+				}
 			},
+		},
+		{
+			File: "frequencies.txt",
+			Action: func(file *csv.File) {
+				parseFrequencies(file, tripIdToScheduledTrip)
+			},
+			Optional: true,
 		},
 		{
 			File: "stop_times.txt",
@@ -1016,8 +1067,8 @@ func parseScheduledStopTimes(csv *csv.File, stops []Stop, trips []ScheduledTrip)
 	var currentTrip *ScheduledTrip
 	var currentTripID string
 	for csv.NextRow() {
-		arrival, arrivalOk := parseStopTimeDuration(arrivalTimeColumn.Read())
-		departure, departueOk := parseStopTimeDuration(departureTimeColumn.Read())
+		arrival, arrivalOk := parseGtfsTimeToDuration(arrivalTimeColumn.Read())
+		departure, departueOk := parseGtfsTimeToDuration(departureTimeColumn.Read())
 		if !arrivalOk && !departueOk {
 			continue
 		}
@@ -1064,7 +1115,7 @@ func parseScheduledStopTimes(csv *csv.File, stops []Stop, trips []ScheduledTrip)
 	}
 }
 
-func parseStopTimeDuration(s *string) (time.Duration, bool) {
+func parseGtfsTimeToDuration(s *string) (time.Duration, bool) {
 	if s == nil {
 		return 0, false
 	}
@@ -1097,7 +1148,7 @@ type ShapeRow struct {
 	ShapeDistTraveled *float64
 }
 
-func parseShapes(csv *csv.File, shapeIDToShape map[string]*Shape) []Shape {
+func parseShapes(csv *csv.File) []Shape {
 	if csv == nil {
 		return nil
 	}
@@ -1120,7 +1171,9 @@ func parseShapes(csv *csv.File, shapeIDToShape map[string]*Shape) []Shape {
 		shapePtLon := parseFloat64(ptr(shapePtLonColumn.Read()))
 		shapePtSequence := parseInt32(ptr(shapePtSequenceColumn.Read()))
 		shapeDistTraveled := parseFloat64(shapeDistTraveled.Read())
-		if shapeID == "" || shapePtLat == nil || shapePtLon == nil || shapePtSequence == nil {
+
+		if missingKeys := csv.MissingRowKeys(); len(missingKeys) > 0 {
+			log.Printf("Skipping shape because of missing keys %s", missingKeys)
 			continue
 		}
 
@@ -1148,13 +1201,10 @@ func parseShapes(csv *csv.File, shapeIDToShape map[string]*Shape) []Shape {
 			})
 		}
 
-		shape := &Shape{
+		shapes = append(shapes, Shape{
 			ID:     shapeID,
 			Points: points,
-		}
-
-		shapes = append(shapes, *shape)
-		shapeIDToShape[shapeID] = shape
+		})
 	}
 
 	// Sort the shapes by ID
@@ -1163,6 +1213,80 @@ func parseShapes(csv *csv.File, shapeIDToShape map[string]*Shape) []Shape {
 	})
 
 	return shapes
+}
+
+func parseFrequencies(csv *csv.File, tripIDToScheduledTrip map[string]*ScheduledTrip) {
+	if csv == nil {
+		return
+	}
+
+	tripIDColumn := csv.RequiredColumn("trip_id")
+	startTimeColumn := csv.RequiredColumn("start_time")
+	endTimeColumn := csv.RequiredColumn("end_time")
+	headwaySecsColumn := csv.RequiredColumn("headway_secs")
+	exactTimesColumn := csv.OptionalColumn("exact_times")
+
+	if err := csv.MissingRequiredColumns(); err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	for csv.NextRow() {
+		tripID := tripIDColumn.Read()
+		startTime := startTimeColumn.Read()
+		endTime := endTimeColumn.Read()
+		headwaySecs := headwaySecsColumn.Read()
+		exactTimes := exactTimesColumn.Read()
+
+		if missingKeys := csv.MissingRowKeys(); len(missingKeys) > 0 {
+			log.Printf("Skipping frequency because of missing keys %s", missingKeys)
+			continue
+		}
+		scheduledTripOrNil := tripIDToScheduledTrip[tripID]
+		if scheduledTripOrNil == nil {
+			log.Printf("Skipping frequency because of missing trip %s", tripID)
+			continue
+		}
+		headwaySecsOrNil := parseInt32(ptr(headwaySecs))
+		if headwaySecsOrNil == nil {
+			log.Print("Skipping frequency because of invalid headway_secs")
+			continue
+		}
+		startTimeDuration, startTimeDurationOk := parseGtfsTimeToDuration(&startTime)
+		if !startTimeDurationOk {
+			log.Print("Skipping frequency because of invalid start_time")
+			continue
+		}
+		endTimeDuration, endTimeDurationOk := parseGtfsTimeToDuration(&endTime)
+		if !endTimeDurationOk {
+			log.Print("Skipping frequency because of invalid end_time")
+			continue
+		}
+
+		var exactTimesOrDefault ExactTimes = FrequencyBased
+		if exactTimes != nil {
+			switch *exactTimes {
+			case "":
+				fallthrough
+			case "0":
+				exactTimesOrDefault = FrequencyBased
+			case "1":
+				exactTimesOrDefault = ScheduleBased
+			default:
+				log.Print("Skipping frequency because of invalid exact_times")
+				continue
+			}
+		}
+
+		frequency := Frequency{
+			StartTime:  startTimeDuration,
+			EndTime:    endTimeDuration,
+			Headway:    time.Duration(*headwaySecsOrNil) * time.Second,
+			ExactTimes: exactTimesOrDefault,
+		}
+
+		scheduledTripOrNil.Frequencies = append(scheduledTripOrNil.Frequencies, frequency)
+	}
 }
 
 func ptr[T any](t T) *T {
