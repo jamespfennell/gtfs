@@ -17,14 +17,13 @@ import (
 
 // Static contains the parsed content for a single GTFS static message.
 type Static struct {
-	Agencies    []Agency
-	Routes      []Route
-	Stops       []Stop
-	Transfers   []Transfer
-	Services    []Service
-	Trips       []ScheduledTrip
-	Shapes      []Shape
-	Frequencies []Frequency
+	Agencies  []Agency
+	Routes    []Route
+	Stops     []Stop
+	Transfers []Transfer
+	Services  []Service
+	Trips     []ScheduledTrip
+	Shapes    []Shape
 }
 
 // Agency corresponds to a single row in the agency.txt file.
@@ -344,6 +343,7 @@ type ScheduledTrip struct {
 	BikesAllowed         *bool
 	StopTimes            []ScheduledStopTime
 	Shape                *Shape
+	Frequencies          []Frequency
 }
 
 type ScheduledStopTime struct {
@@ -396,7 +396,6 @@ func (t ExactTimes) String() string {
 }
 
 type Frequency struct {
-	Trip       *ScheduledTrip
 	StartTime  time.Duration
 	EndTime    time.Duration
 	Headway    time.Duration
@@ -502,20 +501,26 @@ func ParseStatic(content []byte, opts ParseStaticOptions) (*Static, error) {
 		{
 			File: "shapes.txt",
 			Action: func(file *csv.File) {
-				result.Shapes = parseShapes(file, shapeIdToShape)
+				result.Shapes = parseShapes(file)
+				for idx, shape := range result.Shapes {
+					shapeIdToShape[shape.ID] = &result.Shapes[idx]
+				}
 			},
 			Optional: true,
 		},
 		{
 			File: "trips.txt",
 			Action: func(file *csv.File) {
-				result.Trips = parseScheduledTrips(file, result.Routes, result.Services, shapeIdToShape, tripIdToScheduledTrip)
+				result.Trips = parseScheduledTrips(file, result.Routes, result.Services, shapeIdToShape)
+				for idx, trip := range result.Trips {
+					tripIdToScheduledTrip[trip.ID] = &result.Trips[idx]
+				}
 			},
 		},
 		{
 			File: "frequencies.txt",
 			Action: func(file *csv.File) {
-				result.Frequencies = parseFrequencies(file, tripIdToScheduledTrip)
+				parseFrequencies(file, tripIdToScheduledTrip)
 			},
 			Optional: true,
 		},
@@ -960,7 +965,7 @@ func parseTime(s string, timezone *time.Location) (time.Time, error) {
 	return time.ParseInLocation("20060102", s, timezone)
 }
 
-func parseScheduledTrips(csv *csv.File, routes []Route, services []Service, shapeIDToShape map[string]*Shape, tripIDToScheduledTrip map[string]*ScheduledTrip) []ScheduledTrip {
+func parseScheduledTrips(csv *csv.File, routes []Route, services []Service, shapeIDToShape map[string]*Shape) []ScheduledTrip {
 	routeIDColumn := csv.RequiredColumn("route_id")
 	serviceIDColumn := csv.RequiredColumn("service_id")
 	tripIDColumn := csv.RequiredColumn("trip_id")
@@ -1018,7 +1023,6 @@ func parseScheduledTrips(csv *csv.File, routes []Route, services []Service, shap
 			log.Print("Skipping trip because of missing service")
 			continue
 		}
-		tripIDToScheduledTrip[trip.ID] = &trip
 		trips = append(trips, trip)
 	}
 	return trips
@@ -1144,7 +1148,7 @@ type ShapeRow struct {
 	ShapeDistTraveled *float64
 }
 
-func parseShapes(csv *csv.File, shapeIDToShape map[string]*Shape) []Shape {
+func parseShapes(csv *csv.File) []Shape {
 	if csv == nil {
 		return nil
 	}
@@ -1197,13 +1201,10 @@ func parseShapes(csv *csv.File, shapeIDToShape map[string]*Shape) []Shape {
 			})
 		}
 
-		shape := &Shape{
+		shapes = append(shapes, Shape{
 			ID:     shapeID,
 			Points: points,
-		}
-
-		shapes = append(shapes, *shape)
-		shapeIDToShape[shapeID] = shape
+		})
 	}
 
 	// Sort the shapes by ID
@@ -1214,9 +1215,9 @@ func parseShapes(csv *csv.File, shapeIDToShape map[string]*Shape) []Shape {
 	return shapes
 }
 
-func parseFrequencies(csv *csv.File, tripIDToScheduledTrip map[string]*ScheduledTrip) []Frequency {
+func parseFrequencies(csv *csv.File, tripIDToScheduledTrip map[string]*ScheduledTrip) {
 	if csv == nil {
-		return nil
+		return
 	}
 
 	tripIDColumn := csv.RequiredColumn("trip_id")
@@ -1227,10 +1228,9 @@ func parseFrequencies(csv *csv.File, tripIDToScheduledTrip map[string]*Scheduled
 
 	if err := csv.MissingRequiredColumns(); err != nil {
 		fmt.Println(err)
-		return nil
+		return
 	}
 
-	frequencies := []Frequency{}
 	for csv.NextRow() {
 		tripID := tripIDColumn.Read()
 		startTime := startTimeColumn.Read()
@@ -1279,17 +1279,14 @@ func parseFrequencies(csv *csv.File, tripIDToScheduledTrip map[string]*Scheduled
 		}
 
 		frequency := Frequency{
-			Trip:       scheduledTripOrNil,
 			StartTime:  startTimeDuration,
 			EndTime:    endTimeDuration,
 			Headway:    time.Duration(*headwaySecsOrNil) * time.Second,
 			ExactTimes: exactTimesOrDefault,
 		}
 
-		frequencies = append(frequencies, frequency)
+		scheduledTripOrNil.Frequencies = append(scheduledTripOrNil.Frequencies, frequency)
 	}
-
-	return frequencies
 }
 
 func ptr[T any](t T) *T {

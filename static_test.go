@@ -828,12 +828,11 @@ func TestParse(t *testing.T) {
 				"trip_id,start_time,end_time,headway_secs",
 			).build(),
 			expected: &Static{
-				Agencies:    []Agency{defaultAgency},
-				Routes:      []Route{defaultRoute},
-				Services:    []Service{defaultService},
-				Stops:       []Stop{defaultStop},
-				Trips:       []ScheduledTrip{defaultTrip},
-				Frequencies: []Frequency{},
+				Agencies: []Agency{defaultAgency},
+				Routes:   []Route{defaultRoute},
+				Services: []Service{defaultService},
+				Stops:    []Stop{defaultStop},
+				Trips:    []ScheduledTrip{defaultTrip},
 			},
 		},
 		{
@@ -859,35 +858,27 @@ func TestParse(t *testing.T) {
 						ID:      "trip_1",
 						Route:   &defaultRoute,
 						Service: &defaultService,
+						Frequencies: []Frequency{
+							{
+								StartTime:  0 * time.Hour,
+								EndTime:    1 * time.Hour,
+								Headway:    3 * time.Minute,
+								ExactTimes: ScheduleBased,
+							},
+						},
 					},
 					{
 						ID:      "trip_2",
 						Route:   &defaultRoute,
 						Service: &defaultService,
-					},
-				},
-				Frequencies: []Frequency{
-					{
-						Trip: &ScheduledTrip{
-							ID:      "trip_1",
-							Route:   &defaultRoute,
-							Service: &defaultService,
+						Frequencies: []Frequency{
+							{
+								StartTime:  1 * time.Hour,
+								EndTime:    2 * time.Hour,
+								Headway:    5 * time.Minute,
+								ExactTimes: FrequencyBased,
+							},
 						},
-						StartTime:  0 * time.Hour,
-						EndTime:    1 * time.Hour,
-						Headway:    3 * time.Minute,
-						ExactTimes: ScheduleBased,
-					},
-					{
-						Trip: &ScheduledTrip{
-							ID:      "trip_2",
-							Route:   &defaultRoute,
-							Service: &defaultService,
-						},
-						StartTime:  1 * time.Hour,
-						EndTime:    2 * time.Hour,
-						Headway:    5 * time.Minute,
-						ExactTimes: FrequencyBased,
 					},
 				},
 			},
@@ -908,14 +899,19 @@ func TestParse(t *testing.T) {
 				Routes:   []Route{defaultRoute},
 				Services: []Service{defaultService},
 				Stops:    []Stop{defaultStop},
-				Trips:    []ScheduledTrip{defaultTrip},
-				Frequencies: []Frequency{
+				Trips: []ScheduledTrip{
 					{
-						Trip:       &defaultTrip,
-						StartTime:  0 * time.Hour,
-						EndTime:    1 * time.Hour,
-						Headway:    3 * time.Minute,
-						ExactTimes: FrequencyBased,
+						ID:      defaultTrip.ID,
+						Route:   &defaultRoute,
+						Service: &defaultService,
+						Frequencies: []Frequency{
+							{
+								StartTime:  0 * time.Hour,
+								EndTime:    1 * time.Hour,
+								Headway:    3 * time.Minute,
+								ExactTimes: FrequencyBased,
+							},
+						},
 					},
 				},
 			},
@@ -932,14 +928,19 @@ func TestParse(t *testing.T) {
 				Routes:   []Route{defaultRoute},
 				Services: []Service{defaultService},
 				Stops:    []Stop{defaultStop},
-				Trips:    []ScheduledTrip{defaultTrip},
-				Frequencies: []Frequency{
+				Trips: []ScheduledTrip{
 					{
-						Trip:       &defaultTrip,
-						StartTime:  0 * time.Hour,
-						EndTime:    1 * time.Hour,
-						Headway:    3 * time.Minute,
-						ExactTimes: FrequencyBased,
+						ID:      defaultTrip.ID,
+						Route:   &defaultRoute,
+						Service: &defaultService,
+						Frequencies: []Frequency{
+							{
+								StartTime:  0 * time.Hour,
+								EndTime:    1 * time.Hour,
+								Headway:    3 * time.Minute,
+								ExactTimes: FrequencyBased,
+							},
+						},
 					},
 				},
 			},
@@ -952,16 +953,15 @@ func TestParse(t *testing.T) {
 				"some_trip,00:00:00,01:00:00,180",
 			).build(),
 			expected: &Static{
-				Agencies:    []Agency{defaultAgency},
-				Routes:      []Route{defaultRoute},
-				Services:    []Service{defaultService},
-				Stops:       []Stop{defaultStop},
-				Trips:       []ScheduledTrip{defaultTrip},
-				Frequencies: []Frequency{},
+				Agencies: []Agency{defaultAgency},
+				Routes:   []Route{defaultRoute},
+				Services: []Service{defaultService},
+				Stops:    []Stop{defaultStop},
+				Trips:    []ScheduledTrip{defaultTrip},
 			},
 		},
 		{
-			desc: "frequency associated with multiple trips",
+			desc: "trip with multiple frequencies",
 			content: newZipBuilderWithDefaults().add(
 				"frequencies.txt",
 				"trip_id,start_time,end_time,headway_secs,exact_times",
@@ -973,29 +973,25 @@ func TestParse(t *testing.T) {
 				Routes:   []Route{defaultRoute},
 				Services: []Service{defaultService},
 				Stops:    []Stop{defaultStop},
-				Trips:    []ScheduledTrip{defaultTrip},
-				Frequencies: []Frequency{
+				Trips: []ScheduledTrip{
 					{
-						Trip: &ScheduledTrip{
-							ID:      "trip_id",
-							Route:   &defaultRoute,
-							Service: &defaultService,
+						ID:      defaultTrip.ID,
+						Route:   &defaultRoute,
+						Service: &defaultService,
+						Frequencies: []Frequency{
+							{
+								StartTime:  0 * time.Hour,
+								EndTime:    1 * time.Hour,
+								Headway:    3 * time.Minute,
+								ExactTimes: ScheduleBased,
+							},
+							{
+								StartTime:  1 * time.Hour,
+								EndTime:    2 * time.Hour,
+								Headway:    5 * time.Minute,
+								ExactTimes: FrequencyBased,
+							},
 						},
-						StartTime:  0 * time.Hour,
-						EndTime:    1 * time.Hour,
-						Headway:    3 * time.Minute,
-						ExactTimes: ScheduleBased,
-					},
-					{
-						Trip: &ScheduledTrip{
-							ID:      "trip_id",
-							Route:   &defaultRoute,
-							Service: &defaultService,
-						},
-						StartTime:  1 * time.Hour,
-						EndTime:    2 * time.Hour,
-						Headway:    5 * time.Minute,
-						ExactTimes: FrequencyBased,
 					},
 				},
 			},
