@@ -17,13 +17,14 @@ import (
 
 // Static contains the parsed content for a single GTFS static message.
 type Static struct {
-	Agencies  []Agency
-	Routes    []Route
-	Stops     []Stop
-	Transfers []Transfer
-	Services  []Service
-	Trips     []ScheduledTrip
-	Shapes    []Shape
+	Agencies    []Agency
+	Routes      []Route
+	Stops       []Stop
+	Transfers   []Transfer
+	Services    []Service
+	Trips       []ScheduledTrip
+	Shapes      []Shape
+	Frequencies []Frequency
 }
 
 // Agency corresponds to a single row in the agency.txt file.
@@ -365,6 +366,43 @@ type Shape struct {
 	Points []ShapePoint
 }
 
+type ExactTimes int32
+
+const (
+	FrequencyBased ExactTimes = 0
+	ScheduleBased  ExactTimes = 1
+)
+
+func NewExactTimes(i int) ExactTimes {
+	switch i {
+	case 1:
+		return ScheduleBased
+	case 0:
+		fallthrough
+	default:
+		return FrequencyBased
+	}
+}
+
+func (t ExactTimes) String() string {
+	switch t {
+	case ScheduleBased:
+		return "SCHEDULE_BASED"
+	case FrequencyBased:
+		fallthrough
+	default:
+		return "FREQUENCY_BASED"
+	}
+}
+
+type Frequency struct {
+	Trip       *ScheduledTrip
+	StartTime  time.Duration
+	EndTime    time.Duration
+	Headway    time.Duration
+	ExactTimes ExactTimes
+}
+
 // SortScheduledStopTimes sorts the provided stop times based on the stop sequence field.
 func SortScheduledStopTimes(stopTimes []ScheduledStopTime) {
 	sort.Sort(scheduledStopTimeSorter(stopTimes))
@@ -399,6 +437,7 @@ func ParseStatic(content []byte, opts ParseStaticOptions) (*Static, error) {
 	}
 	serviceIdToService := map[string]Service{}
 	shapeIdToShape := map[string]*Shape{}
+	tripIdToScheduledTrip := map[string]*ScheduledTrip{}
 	timezone := time.UTC
 	for _, table := range []struct {
 		File     string
@@ -470,8 +509,15 @@ func ParseStatic(content []byte, opts ParseStaticOptions) (*Static, error) {
 		{
 			File: "trips.txt",
 			Action: func(file *csv.File) {
-				result.Trips = parseScheduledTrips(file, result.Routes, result.Services, shapeIdToShape)
+				result.Trips = parseScheduledTrips(file, result.Routes, result.Services, shapeIdToShape, tripIdToScheduledTrip)
 			},
+		},
+		{
+			File: "frequencies.txt",
+			Action: func(file *csv.File) {
+				result.Frequencies = parseFrequencies(file, tripIdToScheduledTrip)
+			},
+			Optional: true,
 		},
 		{
 			File: "stop_times.txt",
@@ -914,7 +960,7 @@ func parseTime(s string, timezone *time.Location) (time.Time, error) {
 	return time.ParseInLocation("20060102", s, timezone)
 }
 
-func parseScheduledTrips(csv *csv.File, routes []Route, services []Service, shapeIDToShape map[string]*Shape) []ScheduledTrip {
+func parseScheduledTrips(csv *csv.File, routes []Route, services []Service, shapeIDToShape map[string]*Shape, tripIDToScheduledTrip map[string]*ScheduledTrip) []ScheduledTrip {
 	routeIDColumn := csv.RequiredColumn("route_id")
 	serviceIDColumn := csv.RequiredColumn("service_id")
 	tripIDColumn := csv.RequiredColumn("trip_id")
@@ -972,6 +1018,7 @@ func parseScheduledTrips(csv *csv.File, routes []Route, services []Service, shap
 			log.Print("Skipping trip because of missing service")
 			continue
 		}
+		tripIDToScheduledTrip[trip.ID] = &trip
 		trips = append(trips, trip)
 	}
 	return trips
@@ -1016,8 +1063,8 @@ func parseScheduledStopTimes(csv *csv.File, stops []Stop, trips []ScheduledTrip)
 	var currentTrip *ScheduledTrip
 	var currentTripID string
 	for csv.NextRow() {
-		arrival, arrivalOk := parseStopTimeDuration(arrivalTimeColumn.Read())
-		departure, departueOk := parseStopTimeDuration(departureTimeColumn.Read())
+		arrival, arrivalOk := parseGtfsTimeToDuration(arrivalTimeColumn.Read())
+		departure, departueOk := parseGtfsTimeToDuration(departureTimeColumn.Read())
 		if !arrivalOk && !departueOk {
 			continue
 		}
@@ -1064,7 +1111,7 @@ func parseScheduledStopTimes(csv *csv.File, stops []Stop, trips []ScheduledTrip)
 	}
 }
 
-func parseStopTimeDuration(s *string) (time.Duration, bool) {
+func parseGtfsTimeToDuration(s *string) (time.Duration, bool) {
 	if s == nil {
 		return 0, false
 	}
@@ -1120,7 +1167,9 @@ func parseShapes(csv *csv.File, shapeIDToShape map[string]*Shape) []Shape {
 		shapePtLon := parseFloat64(ptr(shapePtLonColumn.Read()))
 		shapePtSequence := parseInt32(ptr(shapePtSequenceColumn.Read()))
 		shapeDistTraveled := parseFloat64(shapeDistTraveled.Read())
-		if shapeID == "" || shapePtLat == nil || shapePtLon == nil || shapePtSequence == nil {
+
+		if missingKeys := csv.MissingRowKeys(); len(missingKeys) > 0 {
+			log.Printf("Skipping shape because of missing keys %s", missingKeys)
 			continue
 		}
 
@@ -1163,6 +1212,84 @@ func parseShapes(csv *csv.File, shapeIDToShape map[string]*Shape) []Shape {
 	})
 
 	return shapes
+}
+
+func parseFrequencies(csv *csv.File, tripIDToScheduledTrip map[string]*ScheduledTrip) []Frequency {
+	if csv == nil {
+		return nil
+	}
+
+	tripIDColumn := csv.RequiredColumn("trip_id")
+	startTimeColumn := csv.RequiredColumn("start_time")
+	endTimeColumn := csv.RequiredColumn("end_time")
+	headwaySecsColumn := csv.RequiredColumn("headway_secs")
+	exactTimesColumn := csv.OptionalColumn("exact_times")
+
+	if err := csv.MissingRequiredColumns(); err != nil {
+		fmt.Println(err)
+		return nil
+	}
+
+	frequencies := []Frequency{}
+	for csv.NextRow() {
+		tripID := tripIDColumn.Read()
+		startTime := startTimeColumn.Read()
+		endTime := endTimeColumn.Read()
+		headwaySecs := headwaySecsColumn.Read()
+		exactTimes := exactTimesColumn.Read()
+
+		if missingKeys := csv.MissingRowKeys(); len(missingKeys) > 0 {
+			log.Printf("Skipping frequency because of missing keys %s", missingKeys)
+			continue
+		}
+		scheduledTripOrNil := tripIDToScheduledTrip[tripID]
+		if scheduledTripOrNil == nil {
+			log.Printf("Skipping frequency because of missing trip %s", tripID)
+			continue
+		}
+		headwaySecsOrNil := parseInt32(ptr(headwaySecs))
+		if headwaySecsOrNil == nil {
+			log.Print("Skipping frequency because of invalid headway_secs")
+			continue
+		}
+		startTimeDuration, startTimeDurationOk := parseGtfsTimeToDuration(&startTime)
+		if !startTimeDurationOk {
+			log.Print("Skipping frequency because of invalid start_time")
+			continue
+		}
+		endTimeDuration, endTimeDurationOk := parseGtfsTimeToDuration(&endTime)
+		if !endTimeDurationOk {
+			log.Print("Skipping frequency because of invalid end_time")
+			continue
+		}
+
+		var exactTimesOrDefault ExactTimes = FrequencyBased
+		if exactTimes != nil {
+			switch *exactTimes {
+			case "":
+				fallthrough
+			case "0":
+				exactTimesOrDefault = FrequencyBased
+			case "1":
+				exactTimesOrDefault = ScheduleBased
+			default:
+				log.Print("Skipping frequency because of invalid exact_times")
+				continue
+			}
+		}
+
+		frequency := Frequency{
+			Trip:       scheduledTripOrNil,
+			StartTime:  startTimeDuration,
+			EndTime:    endTimeDuration,
+			Headway:    time.Duration(*headwaySecsOrNil) * time.Second,
+			ExactTimes: exactTimesOrDefault,
+		}
+
+		frequencies = append(frequencies, frequency)
+	}
+
+	return frequencies
 }
 
 func ptr[T any](t T) *T {
