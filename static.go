@@ -32,110 +32,10 @@ type Agency struct {
 	Name     string
 	Url      string
 	Timezone string
-	Language *string
-	Phone    *string
-	FareUrl  *string
-	Email    *string
-}
-
-type RouteType int32
-
-const (
-	Tram       RouteType = 0
-	Subway     RouteType = 1
-	Rail       RouteType = 2
-	Bus        RouteType = 3
-	Ferry      RouteType = 4
-	CableTram  RouteType = 5
-	AerialLift RouteType = 6
-	Funicular  RouteType = 7
-	TrolleyBus RouteType = 11
-	Monorail   RouteType = 12
-
-	UnknownRouteType RouteType = 10000
-)
-
-func NewRouteType(i int) (RouteType, bool) {
-	var t RouteType
-	switch i {
-	case 0:
-		t = Tram
-	case 1:
-		t = Subway
-	case 2:
-		t = Rail
-	case 3:
-		t = Bus
-	case 4:
-		t = Ferry
-	case 5:
-		t = CableTram
-	case 6:
-		t = AerialLift
-	case 7:
-		t = Funicular
-	case 11:
-		t = TrolleyBus
-	case 12:
-		t = Monorail
-	default:
-		return UnknownRouteType, false
-	}
-	return t, true
-}
-
-func (t RouteType) String() string {
-	switch t {
-	case Tram:
-		return "TRAM"
-	case Subway:
-		return "SUBWAY"
-	case Rail:
-		return "RAIL"
-	case Bus:
-		return "BUS"
-	case Ferry:
-		return "FERRY"
-	case CableTram:
-		return "CABLE_TRAM"
-	case AerialLift:
-		return "AERIAL_LIFT"
-	case Funicular:
-		return "FUNICULAR"
-	case TrolleyBus:
-		return "TROLLEY_BUS"
-	case Monorail:
-		return "MONORAIL"
-	}
-	return "UNKNOWN"
-}
-
-type PickupDropOffPolicy int32
-
-const (
-	// Pickup or drop off happens by default.
-	PickupDropOffPolicy_Yes PickupDropOffPolicy = 0
-	// No pickup or drop off is possible.
-	PickupDropOffPolicy_No PickupDropOffPolicy = 1
-	// Must phone an agency to arrange pickup or drop off.
-	PickupDropOffPolicy_PhoneAgency PickupDropOffPolicy = 2
-	// Must coordinate with a driver to arrange pickup or drop off.
-	PickupDropOffPolicy_CoordinateWithDriver PickupDropOffPolicy = 3
-)
-
-func (t PickupDropOffPolicy) String() string {
-	switch t {
-	case PickupDropOffPolicy_Yes:
-		return "ALLOWED"
-	case PickupDropOffPolicy_PhoneAgency:
-		return "PHONE_AGENCY"
-	case PickupDropOffPolicy_CoordinateWithDriver:
-		return "COORDINATE_WITH_DRIVER"
-	case PickupDropOffPolicy_No:
-		fallthrough
-	default:
-		return "NOT_ALLOWED"
-	}
+	Language string
+	Phone    string
+	FareUrl  string
+	Email    string
 }
 
 type Route struct {
@@ -143,11 +43,11 @@ type Route struct {
 	Agency            *Agency
 	Color             string
 	TextColor         string
-	ShortName         *string
-	LongName          *string
-	Description       *string
+	ShortName         string
+	LongName          string
+	Description       string
 	Type              RouteType
-	Url               *string
+	Url               string
 	SortOrder         *int32
 	ContinuousPickup  PickupDropOffPolicy
 	ContinuousDropOff PickupDropOffPolicy
@@ -155,18 +55,18 @@ type Route struct {
 
 type Stop struct {
 	Id                 string
-	Code               *string
-	Name               *string
-	Description        *string
-	ZoneId             *string
+	Code               string
+	Name               string
+	Description        string
+	ZoneId             string
 	Longitude          *float64
 	Latitude           *float64
-	Url                *string
+	Url                string
 	Type               StopType
 	Parent             *Stop
-	Timezone           *string
+	Timezone           string
 	WheelchairBoarding WheelchairBoarding
-	PlatformCode       *string
+	PlatformCode       string
 }
 
 func (stop *Stop) Root() *Stop {
@@ -231,21 +131,6 @@ const (
 	NotPossible  WheelchairBoarding = 2
 )
 
-func NewWheelchairBoarding(i int) (WheelchairBoarding, bool) {
-	var t WheelchairBoarding
-	switch i {
-	case 0:
-		t = NotSpecified
-	case 1:
-		t = Possible
-	case 2:
-		t = NotPossible
-	default:
-		return NotSpecified, false
-	}
-	return t, true
-}
-
 func (w WheelchairBoarding) String() string {
 	switch w {
 	case Possible:
@@ -301,23 +186,6 @@ const (
 	TransferNotPossible TransferType = 3
 )
 
-func NewTransferType(i int32) (TransferType, bool) {
-	var t TransferType
-	switch i {
-	case 0:
-		t = Recommended
-	case 1:
-		t = Timed
-	case 2:
-		t = RequiresTime
-	case 3:
-		t = TransferNotPossible
-	default:
-		return Recommended, false
-	}
-	return t, true
-}
-
 func (t TransferType) String() string {
 	switch t {
 	case Recommended:
@@ -351,10 +219,10 @@ type ScheduledTrip struct {
 	Route                *Route
 	Service              *Service
 	ID                   string
-	Headsign             *string
-	ShortName            *string
+	Headsign             string
+	ShortName            string
 	DirectionId          DirectionID
-	BlockID              *string
+	BlockID              string
 	WheelchairAccessible WheelchairBoarding
 	BikesAllowed         BikesAllowed
 	StopTimes            []ScheduledStopTime
@@ -368,7 +236,7 @@ type ScheduledStopTime struct {
 	ArrivalTime           time.Duration
 	DepartureTime         time.Duration
 	StopSequence          int
-	Headsign              *string
+	Headsign              string
 	PickupType            PickupDropOffPolicy
 	DropOffType           PickupDropOffPolicy
 	ContinuousPickup      PickupDropOffPolicy
@@ -648,15 +516,15 @@ func parseRoutes(csv *csv.File, agencies []Agency) []Route {
 		routeID := idColumn.Read()
 		agencyID := agencyIDColumn.Read()
 		var agency *Agency
-		if agencyID != nil {
+		if agencyID != "" {
 			for i := range agencies {
-				if agencies[i].Id == *agencyID {
+				if agencies[i].Id == agencyID {
 					agency = &agencies[i]
 					break
 				}
 			}
 			if agency == nil {
-				log.Printf("skipping route %s: no match for agency ID %s", routeID, *agencyID)
+				log.Printf("skipping route %s: no match for agency ID %s", routeID, agencyID)
 				continue
 			}
 		} else if len(agencies) == 1 {
@@ -678,8 +546,8 @@ func parseRoutes(csv *csv.File, agencies []Agency) []Route {
 			Type:              parseRouteType(routeTypeColumn.Read()),
 			Url:               urlColumn.Read(),
 			SortOrder:         parseRouteSortOrder(sortOrderColumn.Read()),
-			ContinuousPickup:  parseRoutePolicy(continuousPickupColumn.ReadOr("")),
-			ContinuousDropOff: parseRoutePolicy(continuousDropOffColumn.ReadOr("")),
+			ContinuousPickup:  parsePickupDropOffPolicy(continuousPickupColumn.ReadOr("")),
+			ContinuousDropOff: parsePickupDropOffPolicy(continuousDropOffColumn.ReadOr("")),
 		}
 		if missingKeys := csv.MissingRowKeys(); len(missingKeys) > 0 {
 			log.Printf("Skipping route %+v because of missing keys %s", route, missingKeys)
@@ -690,38 +558,16 @@ func parseRoutes(csv *csv.File, agencies []Agency) []Route {
 	return routes
 }
 
-func parseRouteType(raw string) RouteType {
-	i, err := strconv.Atoi(raw)
-	if err != nil {
-		return UnknownRouteType
-	}
-	t, _ := NewRouteType(i)
-	return t
-}
-
-func parseRouteSortOrder(raw *string) *int32 {
-	if raw == nil {
+func parseRouteSortOrder(raw string) *int32 {
+	if raw == "" {
 		return nil
 	}
-	i, err := strconv.Atoi(*raw)
+	i, err := strconv.Atoi(raw)
 	if err != nil {
 		return nil
 	}
 	i32 := int32(i)
 	return &i32
-}
-
-func parseRoutePolicy(s string) PickupDropOffPolicy {
-	switch s {
-	case "0":
-		return PickupDropOffPolicy_Yes
-	case "2":
-		return PickupDropOffPolicy_PhoneAgency
-	case "3":
-		return PickupDropOffPolicy_CoordinateWithDriver
-	default:
-		return PickupDropOffPolicy_No
-	}
 }
 
 func parseStops(csv *csv.File) []Stop {
@@ -767,8 +613,8 @@ func parseStops(csv *csv.File) []Stop {
 			continue
 		}
 		stopIdToIndex[stop.Id] = len(stops)
-		if parentStopId := parentStationColumn.Read(); parentStopId != nil {
-			stopIdToParent[stop.Id] = *parentStopId
+		if parentStopId := parentStationColumn.Read(); parentStopId != "" {
+			stopIdToParent[stop.Id] = parentStopId
 		}
 		stops = append(stops, stop)
 	}
@@ -782,39 +628,41 @@ func parseStops(csv *csv.File) []Stop {
 	return stops
 }
 
-func parseFloat64(raw *string) *float64 {
-	if raw == nil {
+func parseFloat64(s string) *float64 {
+	if s == "" {
 		return nil
 	}
-	f, err := strconv.ParseFloat(strings.TrimSpace(*raw), 64)
+	f, err := strconv.ParseFloat(strings.TrimSpace(s), 64)
 	if err != nil {
 		return nil
 	}
 	return &f
 }
 
-func parseStopType(raw *string) StopType {
-	if raw == nil {
+func parseStopType(s string) StopType {
+	switch s {
+	case "1":
+		return Station
+	case "2":
+		return EntranceOrExit
+	case "3":
+		return GenericNode
+	case "4":
+		return BoardingArea
+	default:
 		return Platform
 	}
-	i, err := strconv.Atoi(*raw)
-	if err != nil {
-		return Platform
-	}
-	t, _ := NewStopType(i)
-	return t
 }
 
-func parseWheelchairBoarding(raw *string) WheelchairBoarding {
-	if raw == nil {
+func parseWheelchairBoarding(s string) WheelchairBoarding {
+	switch s {
+	case "1":
+		return Possible
+	case "2":
+		return NotPossible
+	default:
 		return NotSpecified
 	}
-	i, err := strconv.Atoi(*raw)
-	if err != nil {
-		return NotSpecified
-	}
-	t, _ := NewWheelchairBoarding(i)
-	return t
 }
 
 func parseTransfers(csv *csv.File, stops []Stop) []Transfer {
@@ -864,20 +712,24 @@ func parseTransfers(csv *csv.File, stops []Stop) []Transfer {
 	return transfers
 }
 
-func parseTransferType(raw *string) TransferType {
-	i := parseInt32(raw)
-	if i == nil {
+func parseTransferType(s string) TransferType {
+	switch s {
+	case "1":
+		return Timed
+	case "2":
+		return RequiresTime
+	case "3":
+		return TransferNotPossible
+	default:
 		return Recommended
 	}
-	t, _ := NewTransferType(*i)
-	return t
 }
 
-func parseInt32(raw *string) *int32 {
-	if raw == nil {
+func parseInt32(s string) *int32 {
+	if s == "" {
 		return nil
 	}
-	i, err := strconv.ParseInt(*raw, 10, 32)
+	i, err := strconv.ParseInt(s, 10, 32)
 	if err != nil {
 		return nil
 	}
@@ -1040,11 +892,11 @@ func parseScheduledTrips(csv *csv.File, routes []Route, services []Service, shap
 		}
 
 		shapeIDOrNil := shapeIDColumn.Read()
-		if shapeIDOrNil != nil {
-			if shape, ok := shapeIDToShape[*shapeIDOrNil]; ok {
+		if shapeIDOrNil != "" {
+			if shape, ok := shapeIDToShape[shapeIDOrNil]; ok {
 				trip.Shape = shape
 			} else {
-				log.Printf("Shape %s not found for trip %s", *shapeIDOrNil, trip.ID)
+				log.Printf("Shape %s not found for trip %s", shapeIDOrNil, trip.ID)
 			}
 		}
 
@@ -1116,10 +968,10 @@ func parseScheduledStopTimes(csv *csv.File, stops []Stop, trips []ScheduledTrip)
 			ArrivalTime:           arrival,
 			StopSequence:          stopSequence,
 			DepartureTime:         departure,
-			PickupType:            parseRoutePolicy(pickupTypeColumn.ReadOr("")),
-			DropOffType:           parseRoutePolicy(dropOffTypeColumn.ReadOr("")),
-			ContinuousPickup:      parseRoutePolicy(continuousPickupColumn.ReadOr("")),
-			ContinuousDropOff:     parseRoutePolicy(continuousDropOffColumn.ReadOr("")),
+			PickupType:            parsePickupDropOffPolicy(pickupTypeColumn.ReadOr("")),
+			DropOffType:           parsePickupDropOffPolicy(dropOffTypeColumn.ReadOr("")),
+			ContinuousPickup:      parsePickupDropOffPolicy(continuousPickupColumn.ReadOr("")),
+			ContinuousDropOff:     parsePickupDropOffPolicy(continuousDropOffColumn.ReadOr("")),
 			ShapeDistanceTraveled: parseFloat64(shapeDistanceTraveledColumn.Read()),
 			ExactTimes:            timepointColumn.ReadOr("1") == "1",
 		}
@@ -1149,13 +1001,13 @@ func parseScheduledStopTimes(csv *csv.File, stops []Stop, trips []ScheduledTrip)
 	}
 }
 
-func parseGtfsTimeToDuration(s *string) (time.Duration, bool) {
-	if s == nil {
+func parseGtfsTimeToDuration(s string) (time.Duration, bool) {
+	if s == "" {
 		return 0, false
 	}
 	var pieces [3]int
 	var i int
-	for _, c := range *s {
+	for _, c := range s {
 		if '0' <= c && c <= '9' {
 			pieces[i] = 10*pieces[i] + int(c-'0')
 		} else if c == ':' {
@@ -1201,9 +1053,9 @@ func parseShapes(csv *csv.File) []Shape {
 	shapeIDToRowData := map[string][]ShapeRow{}
 	for csv.NextRow() {
 		shapeID := shapeIDColumn.Read()
-		shapePtLat := parseFloat64(ptr(shapePtLatColumn.Read()))
-		shapePtLon := parseFloat64(ptr(shapePtLonColumn.Read()))
-		shapePtSequence := parseInt32(ptr(shapePtSequenceColumn.Read()))
+		shapePtLat := parseFloat64(shapePtLatColumn.Read())
+		shapePtLon := parseFloat64(shapePtLonColumn.Read())
+		shapePtSequence := parseInt32(shapePtSequenceColumn.Read())
 		shapeDistTraveled := parseFloat64(shapeDistTraveled.Read())
 
 		if missingKeys := csv.MissingRowKeys(); len(missingKeys) > 0 {
@@ -1281,35 +1133,25 @@ func parseFrequencies(csv *csv.File, tripIDToScheduledTrip map[string]*Scheduled
 			log.Printf("Skipping frequency because of missing trip %s", tripID)
 			continue
 		}
-		headwaySecsOrNil := parseInt32(ptr(headwaySecs))
+		headwaySecsOrNil := parseInt32(headwaySecs)
 		if headwaySecsOrNil == nil {
 			log.Print("Skipping frequency because of invalid headway_secs")
 			continue
 		}
-		startTimeDuration, startTimeDurationOk := parseGtfsTimeToDuration(&startTime)
+		startTimeDuration, startTimeDurationOk := parseGtfsTimeToDuration(startTime)
 		if !startTimeDurationOk {
 			log.Print("Skipping frequency because of invalid start_time")
 			continue
 		}
-		endTimeDuration, endTimeDurationOk := parseGtfsTimeToDuration(&endTime)
+		endTimeDuration, endTimeDurationOk := parseGtfsTimeToDuration(endTime)
 		if !endTimeDurationOk {
 			log.Print("Skipping frequency because of invalid end_time")
 			continue
 		}
 
 		var exactTimesOrDefault ExactTimes = FrequencyBased
-		if exactTimes != nil {
-			switch *exactTimes {
-			case "":
-				fallthrough
-			case "0":
-				exactTimesOrDefault = FrequencyBased
-			case "1":
-				exactTimesOrDefault = ScheduleBased
-			default:
-				log.Print("Skipping frequency because of invalid exact_times")
-				continue
-			}
+		if exactTimes == "1" {
+			exactTimesOrDefault = ScheduleBased
 		}
 
 		frequency := Frequency{
@@ -1321,8 +1163,4 @@ func parseFrequencies(csv *csv.File, tripIDToScheduledTrip map[string]*Scheduled
 
 		scheduledTripOrNil.Frequencies = append(scheduledTripOrNil.Frequencies, frequency)
 	}
-}
-
-func ptr[T any](t T) *T {
-	return &t
 }
