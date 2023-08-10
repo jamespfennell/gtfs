@@ -187,7 +187,7 @@ func formatVehicle(vehicle gtfs.Vehicle, indent int) string {
 		"VehicleID %s  Label %s  LicencePlate %s%s",
 		tc.Sprint(vehicle.GetID().ID),
 		tc.Sprint(vehicle.GetID().Label),
-		tc.Sprint(vehicle.GetID().LicencePlate),
+		tc.Sprint(vehicle.GetID().LicensePlate),
 		newLine,
 	)
 	if vehicle.Trip != nil {

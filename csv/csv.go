@@ -93,13 +93,13 @@ func (f *File) OptionalColumn(s string) OptionalColumn {
 	return OptionalColumn{i: i, f: f}
 }
 
-func (c OptionalColumn) Read() *string {
+func (c OptionalColumn) Read() string {
 	if c.i < 0 {
-		return nil
+		return ""
 	}
 	// We copy the string pointer because the CSV library reuses the byte array across rows.
 	s := c.f.currentRow.cells[c.i]
-	return &s
+	return s
 }
 
 func (c OptionalColumn) ReadOr(s string) string {

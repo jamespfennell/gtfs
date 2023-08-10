@@ -184,7 +184,7 @@ func TestHashVehicle(t *testing.T) {
 		{
 			"id.licence_plate",
 			func(v *Vehicle) any {
-				return &v.ID.LicencePlate
+				return &v.ID.LicensePlate
 			},
 		},
 		{
@@ -328,7 +328,7 @@ func mkVehicle() Vehicle {
 		ID: &VehicleID{
 			ID:           "vehicle.id.id",
 			Label:        "vehicle.id.label",
-			LicencePlate: "vehicle.id.licence_plate",
+			LicensePlate: "vehicle.id.licence_plate",
 		},
 		Trip:                ptr(mkTrip(0)),
 		Position:            ptr(mkPosition(9)),
