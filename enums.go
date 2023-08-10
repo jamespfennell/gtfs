@@ -1,5 +1,40 @@
 package gtfs
 
+// BikesAllowed describes whether bikes are allowed on a scheduled trip.
+//
+// This is a Go representation of the enum described in the `bikes_allowed` field of `stops.txt`.
+type BikesAllowed int32
+
+const (
+	BikesAllowed_NotSpecified BikesAllowed = 0
+	BikesAllowed_Allowed      BikesAllowed = 1
+	BikesAllowed_NotAllowed   BikesAllowed = 2
+)
+
+func (b BikesAllowed) String() string {
+	switch b {
+	case BikesAllowed_NotSpecified:
+		return "NOT_SPECIFIED"
+	case BikesAllowed_Allowed:
+		return "ALLOWED"
+	case BikesAllowed_NotAllowed:
+		return "NOT_ALLOWED"
+	default:
+		return "UNKNOWN"
+	}
+}
+
+func parseBikesAllowed(s string) BikesAllowed {
+	switch s {
+	case "1":
+		return BikesAllowed_Allowed
+	case "2":
+		return BikesAllowed_NotAllowed
+	default:
+		return BikesAllowed_NotSpecified
+	}
+}
+
 // PickupDropOffPolicy describes the pickup or drop-off policy for a route or scheduled trip.
 //
 // This is a Go representation of the enum described in the `continuous_pickup` field of `routes.txt`,
@@ -164,6 +199,10 @@ func (t StopType) String() string {
 	}
 }
 
+// WheelchairBoarding describes whether wheelchair boarding is available at a stop.
+//
+// This is a Go representation of the enum described in the `wheelchair_boarding` field of `stops.txt`
+// and `wheelchair_accessible` field of `trips.txt`.
 type WheelchairBoarding int32
 
 const (

@@ -79,35 +79,6 @@ func (stop *Stop) Root() *Stop {
 	}
 }
 
-type BikesAllowed int32
-
-const (
-	BikesAllowed_NotSpecified BikesAllowed = 0
-	BikesAllowed_Allowed      BikesAllowed = 1
-	BikesAllowed_NotAllowed   BikesAllowed = 2
-)
-
-func (b BikesAllowed) String() string {
-	switch b {
-	case BikesAllowed_Allowed:
-		return "ALLOWED"
-	case BikesAllowed_NotAllowed:
-		return "NOT_ALLOWED"
-	}
-	return "NOT_SPECIFIED"
-}
-
-func parseBikesAllowed(s string) BikesAllowed {
-	switch s {
-	case "1":
-		return BikesAllowed_Allowed
-	case "2":
-		return BikesAllowed_NotAllowed
-	default:
-		return BikesAllowed_NotSpecified
-	}
-}
-
 type Transfer struct {
 	From            *Stop
 	To              *Stop
