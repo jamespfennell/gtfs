@@ -1,5 +1,50 @@
 package gtfs
 
+// PickupDropOffPolicy describes the pickup or drop-off policy for a route or scheduled trip.
+//
+// This is a Go representation of the enum described in the `continuous_pickup` field of `routes.txt`,
+// and `pickup_type` field of `stop_times.txt`, and similar fields.
+type PickupDropOffPolicy int32
+
+const (
+	// Pickup or drop off happens by default.
+	PickupDropOffPolicy_Yes PickupDropOffPolicy = 0
+	// No pickup or drop off is possible.
+	PickupDropOffPolicy_No PickupDropOffPolicy = 1
+	// Must phone an agency to arrange pickup or drop off.
+	PickupDropOffPolicy_PhoneAgency PickupDropOffPolicy = 2
+	// Must coordinate with a driver to arrange pickup or drop off.
+	PickupDropOffPolicy_CoordinateWithDriver PickupDropOffPolicy = 3
+)
+
+func parsePickupDropOffPolicy(s string) PickupDropOffPolicy {
+	switch s {
+	case "0":
+		return PickupDropOffPolicy_Yes
+	case "2":
+		return PickupDropOffPolicy_PhoneAgency
+	case "3":
+		return PickupDropOffPolicy_CoordinateWithDriver
+	default:
+		return PickupDropOffPolicy_No
+	}
+}
+
+func (t PickupDropOffPolicy) String() string {
+	switch t {
+	case PickupDropOffPolicy_Yes:
+		return "ALLOWED"
+	case PickupDropOffPolicy_PhoneAgency:
+		return "PHONE_AGENCY"
+	case PickupDropOffPolicy_CoordinateWithDriver:
+		return "COORDINATE_WITH_DRIVER"
+	case PickupDropOffPolicy_No:
+		return "NOT_ALLOWED"
+	default:
+		return "UNKNOWN"
+	}
+}
+
 // RouteType describes the type of a route.
 //
 // This is a Go representation of the enum described in the `route_type` field of `routes.txt`.
@@ -74,51 +119,6 @@ func (t RouteType) String() string {
 	}
 }
 
-// PickupDropOffPolicy describes the pickup or drop-off policy for a route or scheduled trip.
-//
-// This is a Go representation of the enum described in the `continuous_pickup` field of `routes.txt`,
-// and `pickup_type` field of `stop_times.txt`, and similar fields.
-type PickupDropOffPolicy int32
-
-const (
-	// Pickup or drop off happens by default.
-	PickupDropOffPolicy_Yes PickupDropOffPolicy = 0
-	// No pickup or drop off is possible.
-	PickupDropOffPolicy_No PickupDropOffPolicy = 1
-	// Must phone an agency to arrange pickup or drop off.
-	PickupDropOffPolicy_PhoneAgency PickupDropOffPolicy = 2
-	// Must coordinate with a driver to arrange pickup or drop off.
-	PickupDropOffPolicy_CoordinateWithDriver PickupDropOffPolicy = 3
-)
-
-func parsePickupDropOffPolicy(s string) PickupDropOffPolicy {
-	switch s {
-	case "0":
-		return PickupDropOffPolicy_Yes
-	case "2":
-		return PickupDropOffPolicy_PhoneAgency
-	case "3":
-		return PickupDropOffPolicy_CoordinateWithDriver
-	default:
-		return PickupDropOffPolicy_No
-	}
-}
-
-func (t PickupDropOffPolicy) String() string {
-	switch t {
-	case PickupDropOffPolicy_Yes:
-		return "ALLOWED"
-	case PickupDropOffPolicy_PhoneAgency:
-		return "PHONE_AGENCY"
-	case PickupDropOffPolicy_CoordinateWithDriver:
-		return "COORDINATE_WITH_DRIVER"
-	case PickupDropOffPolicy_No:
-		return "NOT_ALLOWED"
-	default:
-		return "UNKNOWN"
-	}
-}
-
 // StopType describes the type of a stop.
 //
 // This is a Go representation of the enum described in the `location_type` field of `stops.txt`.
@@ -159,6 +159,38 @@ func (t StopType) String() string {
 		return "GENERIC_NODE"
 	case StopType_BoardingArea:
 		return "BOARDING_AREA"
+	default:
+		return "UNKNOWN"
+	}
+}
+
+type WheelchairBoarding int32
+
+const (
+	WheelchairBoarding_NotSpecified WheelchairBoarding = 0
+	WheelchairBoarding_Possible     WheelchairBoarding = 1
+	WheelchairBoarding_NotPossible  WheelchairBoarding = 2
+)
+
+func parseWheelchairBoarding(s string) WheelchairBoarding {
+	switch s {
+	case "1":
+		return WheelchairBoarding_Possible
+	case "2":
+		return WheelchairBoarding_NotPossible
+	default:
+		return WheelchairBoarding_NotSpecified
+	}
+}
+
+func (w WheelchairBoarding) String() string {
+	switch w {
+	case WheelchairBoarding_NotSpecified:
+		return "NOT_SPECIFIED"
+	case WheelchairBoarding_Possible:
+		return "POSSIBLE"
+	case WheelchairBoarding_NotPossible:
+		return "NOT_POSSIBLE"
 	default:
 		return "UNKNOWN"
 	}

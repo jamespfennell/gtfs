@@ -69,6 +69,7 @@ type Stop struct {
 	PlatformCode       string
 }
 
+// Root returns the root stop.
 func (stop *Stop) Root() *Stop {
 	for {
 		if stop.Parent == nil {
@@ -76,24 +77,6 @@ func (stop *Stop) Root() *Stop {
 		}
 		stop = stop.Parent
 	}
-}
-
-type WheelchairBoarding int32
-
-const (
-	NotSpecified WheelchairBoarding = 0
-	Possible     WheelchairBoarding = 1
-	NotPossible  WheelchairBoarding = 2
-)
-
-func (w WheelchairBoarding) String() string {
-	switch w {
-	case Possible:
-		return "POSSIBLE"
-	case NotPossible:
-		return "NOT_POSSIBLE"
-	}
-	return "NOT_SPECIFIED"
 }
 
 type BikesAllowed int32
@@ -592,17 +575,6 @@ func parseFloat64(s string) *float64 {
 		return nil
 	}
 	return &f
-}
-
-func parseWheelchairBoarding(s string) WheelchairBoarding {
-	switch s {
-	case "1":
-		return Possible
-	case "2":
-		return NotPossible
-	default:
-		return NotSpecified
-	}
 }
 
 func parseTransfers(csv *csv.File, stops []Stop) []Transfer {
