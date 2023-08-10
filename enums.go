@@ -199,6 +199,46 @@ func (t StopType) String() string {
 	}
 }
 
+// StopType describes the type of a transfer.
+//
+// This is a Go representation of the enum described in the `transfer_type` field of `transfers.txt`.
+type TransferType int32
+
+const (
+	TransferType_Recommended  TransferType = 0
+	TransferType_Timed        TransferType = 1
+	TransferType_RequiresTime TransferType = 2
+	TransferType_NotPossible  TransferType = 3
+)
+
+func parseTransferType(s string) TransferType {
+	switch s {
+	case "1":
+		return TransferType_Timed
+	case "2":
+		return TransferType_RequiresTime
+	case "3":
+		return TransferType_NotPossible
+	default:
+		return TransferType_Recommended
+	}
+}
+
+func (t TransferType) String() string {
+	switch t {
+	case TransferType_Recommended:
+		return "RECOMMENDED"
+	case TransferType_Timed:
+		return "TIMED"
+	case TransferType_RequiresTime:
+		return "REQUIRES_TIME"
+	case TransferType_NotPossible:
+		return "NOT_POSSIBLE"
+	default:
+		return "UNKNOWN"
+	}
+}
+
 // WheelchairBoarding describes whether wheelchair boarding is available at a stop.
 //
 // This is a Go representation of the enum described in the `wheelchair_boarding` field of `stops.txt`

@@ -252,7 +252,7 @@ func TestParse(t *testing.T) {
 					{
 						From:            &Stop{Id: "a"},
 						To:              &Stop{Id: "b"},
-						Type:            RequiresTime,
+						Type:            TransferType_RequiresTime,
 						MinTransferTime: ptr(int32(300)),
 					},
 				},

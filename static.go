@@ -86,29 +86,6 @@ type Transfer struct {
 	MinTransferTime *int32
 }
 
-type TransferType int32
-
-const (
-	Recommended         TransferType = 0
-	Timed               TransferType = 1
-	RequiresTime        TransferType = 2
-	TransferNotPossible TransferType = 3
-)
-
-func (t TransferType) String() string {
-	switch t {
-	case Recommended:
-		return "RECOMMENDED"
-	case Timed:
-		return "TIMED"
-	case RequiresTime:
-		return "REQUIRES_TIME"
-	case TransferNotPossible:
-		return "TRANSFER_NOT_POSSIBLE"
-	}
-	return "UNKNOWN"
-}
-
 type Service struct {
 	Id           string
 	Monday       bool
@@ -593,19 +570,6 @@ func parseTransfers(csv *csv.File, stops []Stop) []Transfer {
 		})
 	}
 	return transfers
-}
-
-func parseTransferType(s string) TransferType {
-	switch s {
-	case "1":
-		return Timed
-	case "2":
-		return RequiresTime
-	case "3":
-		return TransferNotPossible
-	default:
-		return Recommended
-	}
 }
 
 func parseInt32(s string) *int32 {
