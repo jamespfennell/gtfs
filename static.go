@@ -78,51 +78,6 @@ func (stop *Stop) Root() *Stop {
 	}
 }
 
-type StopType int32
-
-const (
-	Platform       StopType = 0
-	Station        StopType = 1
-	EntranceOrExit StopType = 2
-	GenericNode    StopType = 3
-	BoardingArea   StopType = 4
-)
-
-func NewStopType(i int) (StopType, bool) {
-	var t StopType
-	switch i {
-	case 0:
-		t = Platform
-	case 1:
-		t = Station
-	case 2:
-		t = EntranceOrExit
-	case 3:
-		t = GenericNode
-	case 4:
-		t = BoardingArea
-	default:
-		return Platform, false
-	}
-	return t, true
-}
-
-func (t StopType) String() string {
-	switch t {
-	case Platform:
-		return "PLATFORM"
-	case Station:
-		return "STATION"
-	case EntranceOrExit:
-		return "ENTRANCE_OR_EXIT"
-	case GenericNode:
-		return "GENERIC_NODE"
-	case BoardingArea:
-		return "BOARDING_AREA"
-	}
-	return "UNKNOWN"
-}
-
 type WheelchairBoarding int32
 
 const (
@@ -637,21 +592,6 @@ func parseFloat64(s string) *float64 {
 		return nil
 	}
 	return &f
-}
-
-func parseStopType(s string) StopType {
-	switch s {
-	case "1":
-		return Station
-	case "2":
-		return EntranceOrExit
-	case "3":
-		return GenericNode
-	case "4":
-		return BoardingArea
-	default:
-		return Platform
-	}
 }
 
 func parseWheelchairBoarding(s string) WheelchairBoarding {

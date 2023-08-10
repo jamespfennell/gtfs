@@ -69,8 +69,9 @@ func (t RouteType) String() string {
 		return "TROLLEY_BUS"
 	case RouteType_Monorail:
 		return "MONORAIL"
+	default:
+		return "UNKNOWN"
 	}
-	return "UNKNOWN"
 }
 
 // PickupDropOffPolicy describes the pickup or drop-off policy for a route or scheduled trip.
@@ -112,8 +113,53 @@ func (t PickupDropOffPolicy) String() string {
 	case PickupDropOffPolicy_CoordinateWithDriver:
 		return "COORDINATE_WITH_DRIVER"
 	case PickupDropOffPolicy_No:
-		fallthrough
-	default:
 		return "NOT_ALLOWED"
+	default:
+		return "UNKNOWN"
+	}
+}
+
+// StopType describes the type of a stop.
+//
+// This is a Go representation of the enum described in the `location_type` field of `stops.txt`.
+type StopType int32
+
+const (
+	StopType_Platform       StopType = 0
+	StopType_Station        StopType = 1
+	StopType_EntranceOrExit StopType = 2
+	StopType_GenericNode    StopType = 3
+	StopType_BoardingArea   StopType = 4
+)
+
+func parseStopType(s string) StopType {
+	switch s {
+	case "1":
+		return StopType_Station
+	case "2":
+		return StopType_EntranceOrExit
+	case "3":
+		return StopType_GenericNode
+	case "4":
+		return StopType_BoardingArea
+	default:
+		return StopType_Platform
+	}
+}
+
+func (t StopType) String() string {
+	switch t {
+	case StopType_Platform:
+		return "PLATFORM"
+	case StopType_Station:
+		return "STATION"
+	case StopType_EntranceOrExit:
+		return "ENTRANCE_OR_EXIT"
+	case StopType_GenericNode:
+		return "GENERIC_NODE"
+	case StopType_BoardingArea:
+		return "BOARDING_AREA"
+	default:
+		return "UNKNOWN"
 	}
 }
