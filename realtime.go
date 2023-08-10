@@ -11,24 +11,6 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-type DirectionID uint8
-
-const (
-	DirectionIDUnspecified DirectionID = 0
-	DirectionIDTrue        DirectionID = 1
-	DirectionIDFalse       DirectionID = 2
-)
-
-func (d DirectionID) String() string {
-	if d == DirectionIDTrue {
-		return "TRUE"
-	}
-	if d == DirectionIDFalse {
-		return "FALSE"
-	}
-	return "UNSPECIFIED"
-}
-
 // Realtime contains the parsed content for a single GTFS realtime message.
 type Realtime struct {
 	CreatedAt time.Time
@@ -101,7 +83,7 @@ type StopTimeEvent struct {
 type VehicleID struct {
 	ID           string
 	Label        string
-	LicencePlate string
+	LicensePlate string
 }
 
 type Position struct {
@@ -454,7 +436,7 @@ func parseTripDescriptor(tripDesc *gtfsrt.TripDescriptor, opts *ParseRealtimeOpt
 	id := TripID{
 		ID:          tripDesc.GetTripId(),
 		RouteID:     tripDesc.GetRouteId(),
-		DirectionID: convertDirectionID(tripDesc.DirectionId),
+		DirectionID: parseDirectionID_GTFSRealtime(tripDesc.DirectionId),
 	}
 	id.HasStartTime, id.StartTime = parseStartTime(tripDesc.StartTime)
 	id.HasStartDate, id.StartDate = parseStartDate(tripDesc.StartDate, opts.timezoneOrUTC())
@@ -505,23 +487,13 @@ func parseVehicleDescriptor(vehicleDesc *gtfsrt.VehicleDescriptor, opts *ParseRe
 	vehicleID := VehicleID{
 		ID:           valOrEmpty(vehicleDesc.Id),
 		Label:        valOrEmpty(vehicleDesc.Label),
-		LicencePlate: valOrEmpty(vehicleDesc.LicensePlate),
+		LicensePlate: valOrEmpty(vehicleDesc.LicensePlate),
 	}
 	var zeroVehicleID VehicleID
 	if vehicleID == zeroVehicleID {
 		return nil
 	}
 	return &vehicleID
-}
-
-func convertDirectionID(raw *uint32) DirectionID {
-	if raw == nil {
-		return DirectionIDUnspecified
-	}
-	if *raw == 0 {
-		return DirectionIDFalse
-	}
-	return DirectionIDTrue
 }
 
 func parseAlert(ID string, alert *gtfsrt.Alert, opts *ParseRealtimeOptions) Alert {

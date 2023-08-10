@@ -35,6 +35,47 @@ func parseBikesAllowed(s string) BikesAllowed {
 	}
 }
 
+// DirectionID is a mechanism for distinguishing between trips going in the opposite direction.
+type DirectionID uint8
+
+const (
+	DirectionID_Unspecified DirectionID = 0
+	DirectionID_True        DirectionID = 1
+	DirectionID_False       DirectionID = 2
+)
+
+func parseDirectionID_GTFSStatic(s string) DirectionID {
+	switch s {
+	case "0":
+		return DirectionID_False
+	case "1":
+		return DirectionID_True
+	default:
+		return DirectionID_Unspecified
+	}
+}
+
+func parseDirectionID_GTFSRealtime(raw *uint32) DirectionID {
+	if raw == nil {
+		return DirectionID_Unspecified
+	}
+	if *raw == 0 {
+		return DirectionID_False
+	}
+	return DirectionID_True
+}
+
+func (d DirectionID) String() string {
+	switch d {
+	case DirectionID_True:
+		return "TRUE"
+	case DirectionID_False:
+		return "FALSE"
+	default:
+		return "UNSPECIFIED"
+	}
+}
+
 // ExactTimes describes the type of service for a trip.
 //
 // This is a Go representation of the enum described in the `exact_times` field of `frequencies.txt`.

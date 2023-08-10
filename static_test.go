@@ -375,7 +375,7 @@ func TestParse(t *testing.T) {
 						ID:                   "a",
 						Headsign:             "b",
 						ShortName:            "c",
-						DirectionId:          DirectionIDTrue,
+						DirectionId:          DirectionID_True,
 						BlockID:              "block_id",
 						WheelchairAccessible: WheelchairBoarding_NotSpecified,
 						BikesAllowed:         BikesAllowed_NotAllowed,

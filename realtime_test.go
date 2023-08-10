@@ -46,7 +46,7 @@ func TestRealtime(t *testing.T) {
 				trip := gtfs.Trip{
 					ID: gtfs.TripID{
 						ID:          tripID1,
-						DirectionID: gtfs.DirectionIDUnspecified,
+						DirectionID: gtfs.DirectionID_Unspecified,
 					},
 					IsEntityInMessage: true,
 				}
@@ -97,7 +97,7 @@ func TestRealtime(t *testing.T) {
 				trip := gtfs.Trip{
 					ID: gtfs.TripID{
 						ID:          tripID1,
-						DirectionID: gtfs.DirectionIDUnspecified,
+						DirectionID: gtfs.DirectionID_Unspecified,
 					},
 					IsEntityInMessage: false,
 				}
@@ -260,7 +260,7 @@ func TestRealtime(t *testing.T) {
 				trip := gtfs.Trip{
 					ID: gtfs.TripID{
 						ID:          tripID1,
-						DirectionID: gtfs.DirectionIDUnspecified,
+						DirectionID: gtfs.DirectionID_Unspecified,
 					},
 					IsEntityInMessage: true,
 				}

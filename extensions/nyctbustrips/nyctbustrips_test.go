@@ -63,12 +63,12 @@ func TestUpdatesTripId(t *testing.T) {
 				}
 			}
 
-			var directionId gtfs.DirectionID = gtfs.DirectionIDUnspecified
+			var directionId gtfs.DirectionID = gtfs.DirectionID_Unspecified
 			if testCase.DirectionId != nil {
 				if *testCase.DirectionId == 0 {
-					directionId = gtfs.DirectionIDFalse
+					directionId = gtfs.DirectionID_False
 				} else {
-					directionId = gtfs.DirectionIDTrue
+					directionId = gtfs.DirectionID_True
 				}
 			}
 

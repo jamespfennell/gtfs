@@ -72,7 +72,7 @@ func (h *hasher) vehicle(v *Vehicle) {
 	if v.ID != nil {
 		h.string(v.ID.ID)
 		h.string(v.ID.Label)
-		h.string(v.ID.LicencePlate)
+		h.string(v.ID.LicensePlate)
 	}
 	h.number(v.Trip == nil)
 	if v.Trip != nil {

@@ -149,25 +149,6 @@ type Frequency struct {
 	ExactTimes ExactTimes
 }
 
-// SortScheduledStopTimes sorts the provided stop times based on the stop sequence field.
-func SortScheduledStopTimes(stopTimes []ScheduledStopTime) {
-	sort.Sort(scheduledStopTimeSorter(stopTimes))
-}
-
-type scheduledStopTimeSorter []ScheduledStopTime
-
-func (s scheduledStopTimeSorter) Len() int {
-	return len([]ScheduledStopTime(s))
-}
-
-func (s scheduledStopTimeSorter) Less(i, j int) bool {
-	return s[i].StopSequence < s[j].StopSequence
-}
-
-func (s scheduledStopTimeSorter) Swap(i, j int) {
-	s[i], s[j] = s[j], s[i]
-}
-
 type ParseStaticOptions struct{}
 
 // ParseStatic parses the content as a GTFS static feed.
@@ -659,17 +640,6 @@ func parseTime(s string, timezone *time.Location) (time.Time, error) {
 	return time.ParseInLocation("20060102", s, timezone)
 }
 
-func parseDirectionID(s string) DirectionID {
-	switch s {
-	case "0":
-		return DirectionIDFalse
-	case "1":
-		return DirectionIDTrue
-	default:
-		return DirectionIDUnspecified
-	}
-}
-
 func parseScheduledTrips(csv *csv.File, routes []Route, services []Service, shapeIDToShape map[string]*Shape) []ScheduledTrip {
 	routeIDColumn := csv.RequiredColumn("route_id")
 	serviceIDColumn := csv.RequiredColumn("service_id")
@@ -703,7 +673,7 @@ func parseScheduledTrips(csv *csv.File, routes []Route, services []Service, shap
 			ID:                   tripIDColumn.Read(),
 			Headsign:             tripHeadsignColumn.Read(),
 			ShortName:            tripShortNameColumn.Read(),
-			DirectionId:          parseDirectionID(directionIDColumn.ReadOr("")),
+			DirectionId:          parseDirectionID_GTFSStatic(directionIDColumn.ReadOr("")),
 			BlockID:              blockIDColumn.Read(),
 			WheelchairAccessible: parseWheelchairBoarding(wheelchairAccessibleColumn.Read()),
 			BikesAllowed:         parseBikesAllowed(bikesAllowedColumn.ReadOr("")),
@@ -815,7 +785,9 @@ func parseScheduledStopTimes(csv *csv.File, stops []Stop, trips []ScheduledTrip)
 		currentTrip.StopTimes = append(currentTrip.StopTimes, stopTime)
 	}
 	for _, trip := range idToTrip {
-		SortScheduledStopTimes(trip.StopTimes)
+		sort.Slice(trip.StopTimes, func(i, j int) bool {
+			return trip.StopTimes[i].StopSequence < trip.StopTimes[j].StopSequence
+		})
 	}
 }
 
