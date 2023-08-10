@@ -35,6 +35,38 @@ func parseBikesAllowed(s string) BikesAllowed {
 	}
 }
 
+// ExactTimes describes the type of service for a trip.
+//
+// This is a Go representation of the enum described in the `exact_times` field of `frequencies.txt`.
+type ExactTimes int32
+
+const (
+	FrequencyBased ExactTimes = 0
+	ScheduleBased  ExactTimes = 1
+)
+
+func parseExactTimes(s string) ExactTimes {
+	switch s {
+	case "0":
+		return FrequencyBased
+	case "1":
+		return ScheduleBased
+	default:
+		return FrequencyBased
+	}
+}
+
+func (t ExactTimes) String() string {
+	switch t {
+	case ScheduleBased:
+		return "SCHEDULE_BASED"
+	case FrequencyBased:
+		fallthrough
+	default:
+		return "FREQUENCY_BASED"
+	}
+}
+
 // PickupDropOffPolicy describes the pickup or drop-off policy for a route or scheduled trip.
 //
 // This is a Go representation of the enum described in the `continuous_pickup` field of `routes.txt`,

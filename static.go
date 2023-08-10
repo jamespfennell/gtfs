@@ -142,35 +142,6 @@ type Shape struct {
 	Points []ShapePoint
 }
 
-type ExactTimes int32
-
-const (
-	FrequencyBased ExactTimes = 0
-	ScheduleBased  ExactTimes = 1
-)
-
-func NewExactTimes(i int) ExactTimes {
-	switch i {
-	case 1:
-		return ScheduleBased
-	case 0:
-		fallthrough
-	default:
-		return FrequencyBased
-	}
-}
-
-func (t ExactTimes) String() string {
-	switch t {
-	case ScheduleBased:
-		return "SCHEDULE_BASED"
-	case FrequencyBased:
-		fallthrough
-	default:
-		return "FREQUENCY_BASED"
-	}
-}
-
 type Frequency struct {
 	StartTime  time.Duration
 	EndTime    time.Duration
@@ -969,7 +940,6 @@ func parseFrequencies(csv *csv.File, tripIDToScheduledTrip map[string]*Scheduled
 		startTime := startTimeColumn.Read()
 		endTime := endTimeColumn.Read()
 		headwaySecs := headwaySecsColumn.Read()
-		exactTimes := exactTimesColumn.Read()
 
 		if missingKeys := csv.MissingRowKeys(); len(missingKeys) > 0 {
 			log.Printf("Skipping frequency because of missing keys %s", missingKeys)
@@ -996,16 +966,11 @@ func parseFrequencies(csv *csv.File, tripIDToScheduledTrip map[string]*Scheduled
 			continue
 		}
 
-		var exactTimesOrDefault ExactTimes = FrequencyBased
-		if exactTimes == "1" {
-			exactTimesOrDefault = ScheduleBased
-		}
-
 		frequency := Frequency{
 			StartTime:  startTimeDuration,
 			EndTime:    endTimeDuration,
 			Headway:    time.Duration(*headwaySecsOrNil) * time.Second,
-			ExactTimes: exactTimesOrDefault,
+			ExactTimes: parseExactTimes(exactTimesColumn.Read()),
 		}
 
 		scheduledTripOrNil.Frequencies = append(scheduledTripOrNil.Frequencies, frequency)
