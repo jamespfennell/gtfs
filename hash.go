@@ -39,6 +39,7 @@ func (h *hasher) flush() {
 func (h *hasher) trip(t *Trip) {
 	h.string(t.ID.ID)
 	h.string(t.ID.RouteID)
+	h.number(t.ID.DirectionID)
 	h.number(t.ID.HasStartDate)
 	h.number(t.ID.StartDate.Unix())
 	h.number(t.ID.HasStartTime)

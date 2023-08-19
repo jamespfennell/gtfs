@@ -36,6 +36,12 @@ func TestHashTrip(t *testing.T) {
 			},
 		},
 		{
+			"id.direction_id",
+			func(t *Trip) any {
+				return &t.ID.DirectionID
+			},
+		},
+		{
 			"id.has_start_date",
 			func(t *Trip) any {
 				return &t.ID.HasStartDate
@@ -407,6 +413,8 @@ func allModifiers(a any) []modifier {
 		return []modifier{noOpModifier, otherValueModifier}
 	case **OccupancyStatus:
 		return []modifier{noOpModifier, otherValueModifier, nilModifier}
+	case *DirectionID:
+		return []modifier{noOpModifier, otherValueModifier}
 	default:
 		panic(fmt.Sprintf("invalid type %T", a))
 	}
@@ -512,6 +520,8 @@ func otherValueModifierFn(a any) {
 		*t = gtfsrt.VehiclePosition_STOP_AND_GO
 	case **OccupancyStatus:
 		*t = ptr(gtfsrt.VehiclePosition_CRUSHED_STANDING_ROOM_ONLY)
+	case *DirectionID:
+		*t = DirectionID_True
 	default:
 		panic(fmt.Sprintf("invalid type %T", a))
 	}
