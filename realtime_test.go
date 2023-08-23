@@ -247,6 +247,14 @@ func TestRealtime(t *testing.T) {
 						},
 					},
 				},
+				Trips: []gtfs.Trip{
+					{
+						ID: gtfs.TripID{
+							ID: "TripID",
+						},
+						IsEntityInMessage: false,
+					},
+				},
 			},
 		},
 		{

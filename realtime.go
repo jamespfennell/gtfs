@@ -194,8 +194,8 @@ type AlertActivePeriod struct {
 }
 
 type AlertInformedEntity struct {
-	AgencyID    *string
-	RouteID     *string
+	AgencyID *string
+	RouteID  *string
 	// If RouteType isn't set, this will be RouteType_Unknown.
 	RouteType   RouteType
 	DirectionID DirectionID
@@ -264,6 +264,8 @@ func ParseRealtime(content []byte, opts *ParseRealtimeOptions) (*Realtime, error
 		}
 		var trip *Trip
 		var vehicle *Vehicle
+		var alert *Alert
+		var alertTrips []Trip
 		var ok bool
 
 		if tripUpdate := entity.TripUpdate; tripUpdate != nil {
@@ -271,9 +273,9 @@ func ParseRealtime(content []byte, opts *ParseRealtimeOptions) (*Realtime, error
 		} else if vehiclePosition := entity.Vehicle; vehiclePosition != nil {
 			trip, vehicle = parseVehicle(vehiclePosition, opts, feedMessage.GetHeader().GetTimestamp())
 			ok = true
-		} else if alert := entity.Alert; alert != nil {
-			result.Alerts = append(result.Alerts, parseAlert(entity.GetId(), alert, opts))
-			continue
+		} else if entityAlert := entity.Alert; entityAlert != nil {
+			alert, alertTrips = parseAlert(entity.GetId(), entityAlert, opts)
+			ok = true
 		} else {
 			continue
 		}
@@ -282,6 +284,15 @@ func ParseRealtime(content []byte, opts *ParseRealtimeOptions) (*Realtime, error
 			continue
 		}
 
+		if alert != nil {
+			result.Alerts = append(result.Alerts, *alert)
+			for _, trip := range alertTrips {
+				if _, ok := tripsById[trip.ID]; !ok {
+					tripsById[trip.ID] = &Trip{}
+				}
+				mergeTrip(tripsById[trip.ID], trip)
+			}
+		}
 		if trip != nil {
 			if _, ok := tripsById[trip.ID]; !ok {
 				tripsById[trip.ID] = &Trip{}
@@ -505,7 +516,7 @@ func parseVehicleDescriptor(vehicleDesc *gtfsrt.VehicleDescriptor, opts *ParseRe
 	return &vehicleID
 }
 
-func parseAlert(ID string, alert *gtfsrt.Alert, opts *ParseRealtimeOptions) Alert {
+func parseAlert(ID string, alert *gtfsrt.Alert, opts *ParseRealtimeOptions) (*Alert, []Trip) {
 	var activePeriods []AlertActivePeriod
 	for _, entity := range alert.GetActivePeriod() {
 		activePeriods = append(activePeriods, AlertActivePeriod{
@@ -514,17 +525,25 @@ func parseAlert(ID string, alert *gtfsrt.Alert, opts *ParseRealtimeOptions) Aler
 		})
 	}
 	var informedEntities []AlertInformedEntity
+	var trips []Trip
 	for _, entity := range alert.GetInformedEntity() {
+		tripIDOrNil := parseOptionalTripDescriptor(entity.Trip, opts)
 		informedEntities = append(informedEntities, AlertInformedEntity{
 			AgencyID:    entity.AgencyId,
 			RouteID:     entity.RouteId,
 			RouteType:   parseRouteType_GTFSRealtime(entity.RouteType),
 			DirectionID: parseDirectionID_GTFSRealtime(entity.DirectionId),
-			TripID:      parseOptionalTripDescriptor(entity.Trip, opts),
+			TripID:      tripIDOrNil,
 			StopID:      entity.StopId,
 		})
+		if tripIDOrNil != nil {
+			trips = append(trips, Trip{
+				ID:                *tripIDOrNil,
+				IsEntityInMessage: false,
+			})
+		}
 	}
-	return Alert{
+	gtfsAlert := &Alert{
 		ID:               ID,
 		ActivePeriods:    activePeriods,
 		Cause:            alert.GetCause(),
@@ -534,6 +553,7 @@ func parseAlert(ID string, alert *gtfsrt.Alert, opts *ParseRealtimeOptions) Aler
 		Description:      buildAlertText(alert.GetDescriptionText()),
 		URL:              buildAlertText(alert.GetUrl()),
 	}
+	return gtfsAlert, trips
 }
 
 func buildAlertText(ts *gtfsrt.TranslatedString) []AlertText {
