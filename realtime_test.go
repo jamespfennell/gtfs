@@ -148,10 +148,17 @@ func TestRealtime(t *testing.T) {
 								AgencyId: ptr("AgencyID"),
 							},
 							{
-								RouteId: ptr("RouteID"),
+								RouteId:   ptr("RouteID"),
+								RouteType: ptr(int32(gtfs.RouteType_Subway)),
 							},
 							{
 								StopId: ptr("StopID"),
+							},
+							{
+								Trip: &gtfsrt.TripDescriptor{
+									TripId: ptr("TripID"),
+								},
+								DirectionId: ptr(uint32(gtfs.DirectionID_True)),
 							},
 						},
 						Cause:  ptr(gtfsrt.Alert_CONSTRUCTION),
@@ -197,13 +204,25 @@ func TestRealtime(t *testing.T) {
 						},
 						InformedEntities: []gtfs.AlertInformedEntity{
 							{
-								AgencyID: ptr("AgencyID"),
+								AgencyID:  ptr("AgencyID"),
+								RouteType: gtfs.RouteType_Unknown,
 							},
 							{
-								RouteID: ptr("RouteID"),
+								RouteID:   ptr("RouteID"),
+								RouteType: gtfs.RouteType_Subway,
 							},
 							{
-								StopID: ptr("StopID"),
+								StopID:    ptr("StopID"),
+								RouteType: gtfs.RouteType_Unknown,
+							},
+							{
+								TripID: &gtfs.TripID{
+									ID:          "TripID",
+									RouteID:     "",
+									DirectionID: gtfs.DirectionID_Unspecified,
+								},
+								RouteType:   gtfs.RouteType_Unknown,
+								DirectionID: gtfs.DirectionID_True,
 							},
 						},
 						Cause:  gtfsrt.Alert_CONSTRUCTION,
