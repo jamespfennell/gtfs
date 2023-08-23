@@ -381,7 +381,7 @@ func parseRoutes(csv *csv.File, agencies []Agency) []Route {
 			ShortName:         shortNameColumn.Read(),
 			LongName:          longNameColumn.Read(),
 			Description:       descriptionColumn.Read(),
-			Type:              parseRouteType(routeTypeColumn.Read()),
+			Type:              parseRouteType_GTFSStatic(routeTypeColumn.Read()),
 			Url:               urlColumn.Read(),
 			SortOrder:         parseRouteSortOrder(sortOrderColumn.Read()),
 			ContinuousPickup:  parsePickupDropOffPolicy(continuousPickupColumn.ReadOr("")),

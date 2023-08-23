@@ -196,8 +196,8 @@ type AlertActivePeriod struct {
 type AlertInformedEntity struct {
 	AgencyID    *string
 	RouteID     *string
-	RouteType   *RouteType
-	DirectionID *DirectionID
+	RouteType   RouteType
+	DirectionID DirectionID
 	TripID      *TripID
 	StopID      *string
 }
@@ -432,6 +432,14 @@ func mergeVehicle(v *Vehicle, new Vehicle) {
 var startTimeRegex *regexp.Regexp = regexp.MustCompile(`^([0-9]{2}):([0-9]{2}):([0-9]{2})$`)
 var startDateRegex *regexp.Regexp = regexp.MustCompile(`^([0-9]{4})([0-9]{2})([0-9]{2})$`)
 
+func parseOptionalTripDescriptor(tripDesc *gtfsrt.TripDescriptor, opts *ParseRealtimeOptions) *TripID {
+	if tripDesc == nil {
+		return nil
+	}
+	tripID := parseTripDescriptor(tripDesc, opts)
+	return &tripID
+}
+
 func parseTripDescriptor(tripDesc *gtfsrt.TripDescriptor, opts *ParseRealtimeOptions) TripID {
 	id := TripID{
 		ID:          tripDesc.GetTripId(),
@@ -507,13 +515,12 @@ func parseAlert(ID string, alert *gtfsrt.Alert, opts *ParseRealtimeOptions) Aler
 	var informedEntities []AlertInformedEntity
 	for _, entity := range alert.GetInformedEntity() {
 		informedEntities = append(informedEntities, AlertInformedEntity{
-			AgencyID: entity.AgencyId,
-			RouteID:  entity.RouteId,
-			// TODO
-			// RouteType    *RouteType
-			// DirectionID *DirectionID
-			// TripID      *TripID
-			StopID: entity.StopId,
+			AgencyID:    entity.AgencyId,
+			RouteID:     entity.RouteId,
+			RouteType:   parseRouteType_GTFSRealtime(entity.RouteType),
+			DirectionID: parseDirectionID_GTFSRealtime(entity.DirectionId),
+			TripID:      parseOptionalTripDescriptor(entity.Trip, opts),
+			StopID:      entity.StopId,
 		})
 	}
 	return Alert{

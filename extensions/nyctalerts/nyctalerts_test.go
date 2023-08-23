@@ -79,7 +79,8 @@ func TestElevatorAlerts(t *testing.T) {
 		for _, stopID := range informedStopID {
 			stopID := stopID
 			informedEntites = append(informedEntites, gtfs.AlertInformedEntity{
-				StopID: &stopID,
+				StopID:    &stopID,
+				RouteType: gtfs.RouteType_Unknown,
 			})
 		}
 		return gtfs.Alert{

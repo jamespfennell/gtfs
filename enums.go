@@ -1,5 +1,7 @@
 package gtfs
 
+import "strconv"
+
 // BikesAllowed describes whether bikes are allowed on a scheduled trip.
 //
 // This is a Go representation of the enum described in the `bikes_allowed` field of `stops.txt`.
@@ -173,7 +175,7 @@ const (
 	RouteType_Unknown RouteType = 10000
 )
 
-func parseRouteType(s string) RouteType {
+func parseRouteType_GTFSStatic(s string) RouteType {
 	switch s {
 	case "0":
 		return RouteType_Tram
@@ -198,6 +200,13 @@ func parseRouteType(s string) RouteType {
 	default:
 		return RouteType_Unknown
 	}
+}
+
+func parseRouteType_GTFSRealtime(raw *int32) RouteType {
+	if raw == nil {
+		return RouteType_Unknown
+	}
+	return parseRouteType_GTFSStatic(strconv.FormatInt(int64(*raw), 10))
 }
 
 func (t RouteType) String() string {
