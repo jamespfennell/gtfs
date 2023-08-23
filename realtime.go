@@ -196,6 +196,7 @@ type AlertActivePeriod struct {
 type AlertInformedEntity struct {
 	AgencyID    *string
 	RouteID     *string
+	// If RouteType isn't set, this will be RouteType_Unknown.
 	RouteType   RouteType
 	DirectionID DirectionID
 	TripID      *TripID
