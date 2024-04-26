@@ -227,6 +227,7 @@ func TestParse(t *testing.T) {
 					{
 						Id:     "a",
 						Parent: &Stop{Id: "b"},
+						Type:   StopType_Platform,
 					},
 					{
 						Id: "b",

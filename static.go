@@ -432,8 +432,14 @@ func parseStops(csv *csv.File) []Stop {
 	stopIdToIndex := map[string]int{}
 	stopIdToParent := map[string]string{}
 	for csv.NextRow() {
+		stopID := idColumn.Read()
+		hasParentStop := false
+		if parentStopId := parentStationColumn.Read(); parentStopId != "" {
+			stopIdToParent[stopID] = parentStopId
+			hasParentStop = true
+		}
 		stop := Stop{
-			Id:                 idColumn.Read(),
+			Id:                 stopID,
 			Code:               codeColumn.Read(),
 			Name:               nameColumn.Read(),
 			Description:        descriptionColumn.Read(),
@@ -441,7 +447,7 @@ func parseStops(csv *csv.File) []Stop {
 			Longitude:          parseFloat64(longitudeColumn.Read()),
 			Latitude:           parseFloat64(latitudeColumn.Read()),
 			Url:                urlColumn.Read(),
-			Type:               parseStopType(typeColumn.Read()),
+			Type:               parseStopType(typeColumn.Read(), hasParentStop),
 			Timezone:           timezoneColumn.Read(),
 			WheelchairBoarding: parseWheelchairBoarding(wheelchairBoardingColumn.Read()),
 			PlatformCode:       platformCodeColumn.Read(),
@@ -451,9 +457,6 @@ func parseStops(csv *csv.File) []Stop {
 			continue
 		}
 		stopIdToIndex[stop.Id] = len(stops)
-		if parentStopId := parentStationColumn.Read(); parentStopId != "" {
-			stopIdToParent[stop.Id] = parentStopId
-		}
 		stops = append(stops, stop)
 	}
 	for stopId, parentStopId := range stopIdToParent {

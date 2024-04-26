@@ -242,14 +242,15 @@ func (t RouteType) String() string {
 type StopType int32
 
 const (
-	StopType_Platform       StopType = 0
+	StopType_Stop           StopType = 0
 	StopType_Station        StopType = 1
 	StopType_EntranceOrExit StopType = 2
 	StopType_GenericNode    StopType = 3
 	StopType_BoardingArea   StopType = 4
+	StopType_Platform       StopType = 5
 )
 
-func parseStopType(s string) StopType {
+func parseStopType(s string, hasParentStop bool) StopType {
 	switch s {
 	case "1":
 		return StopType_Station
@@ -260,12 +261,18 @@ func parseStopType(s string) StopType {
 	case "4":
 		return StopType_BoardingArea
 	default:
-		return StopType_Platform
+		if hasParentStop {
+			return StopType_Platform
+		} else {
+			return StopType_Stop
+		}
 	}
 }
 
 func (t StopType) String() string {
 	switch t {
+	case StopType_Stop:
+		return "STOP"
 	case StopType_Platform:
 		return "PLATFORM"
 	case StopType_Station:

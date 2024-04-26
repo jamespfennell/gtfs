@@ -269,9 +269,9 @@ func ParseRealtime(content []byte, opts *ParseRealtimeOptions) (*Realtime, error
 		var ok bool
 
 		if tripUpdate := entity.TripUpdate; tripUpdate != nil {
-			trip, vehicle, ok = parseTripUpdate(tripUpdate, opts, feedMessage.GetHeader().GetTimestamp())
+			trip, vehicle, ok = parseTripUpdate(tripUpdate, opts)
 		} else if vehiclePosition := entity.Vehicle; vehiclePosition != nil {
-			trip, vehicle = parseVehicle(vehiclePosition, opts, feedMessage.GetHeader().GetTimestamp())
+			trip, vehicle = parseVehicle(vehiclePosition, opts)
 			ok = true
 		} else if entityAlert := entity.Alert; entityAlert != nil {
 			alert, alertTrips = parseAlert(entity.GetId(), entityAlert, opts)
@@ -337,7 +337,7 @@ func ParseRealtime(content []byte, opts *ParseRealtimeOptions) (*Realtime, error
 	return &result, nil
 }
 
-func parseTripUpdate(tripUpdate *gtfsrt.TripUpdate, opts *ParseRealtimeOptions, feedCreatedAt uint64) (*Trip, *Vehicle, bool) {
+func parseTripUpdate(tripUpdate *gtfsrt.TripUpdate, opts *ParseRealtimeOptions) (*Trip, *Vehicle, bool) {
 	if tripUpdate.Trip == nil {
 		return nil, nil, false
 	}
@@ -375,19 +375,19 @@ func parseTripUpdate(tripUpdate *gtfsrt.TripUpdate, opts *ParseRealtimeOptions, 
 		return trip, nil, true
 	}
 	vehicle := &Vehicle{
-		ID:                parseVehicleDescriptor(tripUpdate.Vehicle, opts),
+		ID:                parseVehicleDescriptor(tripUpdate.Vehicle),
 		IsEntityInMessage: false,
 	}
 	return trip, vehicle, true
 }
 
-func parseVehicle(vehiclePosition *gtfsrt.VehiclePosition, opts *ParseRealtimeOptions, feedCreatedAt uint64) (*Trip, *Vehicle) {
+func parseVehicle(vehiclePosition *gtfsrt.VehiclePosition, opts *ParseRealtimeOptions) (*Trip, *Vehicle) {
 	var congestionLevel = gtfsrt.VehiclePosition_UNKNOWN_CONGESTION_LEVEL
 	if vehiclePosition.CongestionLevel != nil {
 		congestionLevel = *vehiclePosition.CongestionLevel
 	}
 	vehicle := &Vehicle{
-		ID:                  parseVehicleDescriptor(vehiclePosition.Vehicle, opts),
+		ID:                  parseVehicleDescriptor(vehiclePosition.Vehicle),
 		Position:            convertVehiclePosition(vehiclePosition),
 		CurrentStopSequence: vehiclePosition.CurrentStopSequence,
 		StopID:              vehiclePosition.StopId,
@@ -494,7 +494,7 @@ func parseStartDate(startDate *string, timezone *time.Location) (bool, time.Time
 	return true, time.Date(y, time.Month(m), d, 0, 0, 0, 0, timezone)
 }
 
-func parseVehicleDescriptor(vehicleDesc *gtfsrt.VehicleDescriptor, opts *ParseRealtimeOptions) *VehicleID {
+func parseVehicleDescriptor(vehicleDesc *gtfsrt.VehicleDescriptor) *VehicleID {
 	if vehicleDesc == nil {
 		return nil
 	}
