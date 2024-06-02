@@ -19,9 +19,6 @@ type Extension interface {
 type UpdateTripResult struct {
 	// Whether this trip should be skipped.
 	ShouldSkip bool
-
-	// Value of the NyctIsAssigned field if the entity is a trip. This field is ignored for vehicles.
-	NyctIsAssigned bool
 }
 
 func NoExtension() Extension {

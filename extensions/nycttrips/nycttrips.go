@@ -1,4 +1,4 @@
-// Package nycttrips contains logic for the New York City Transit GTFS realtime extenstions
+// Package nycttrips contains logic for the New York City Transit GTFS realtime extensions
 package nycttrips
 
 import (
@@ -43,13 +43,11 @@ func (e extension) UpdateTrip(trip *gtfsrt.TripUpdate, feedCreatedAt uint64) ext
 	if !e.opts.PreserveMTrainPlatformsInBushwick {
 		fixMTrainPlatformsInBushwick(trip)
 	}
-	// TODO: ensure that if isAssigned is true then the vehicle is populated, otherwise populate it somehow
 	isAssigned := e.updateTripOrVehicle(trip)
 	shouldSkip := proto.HasExtension(trip.GetTrip(), gtfsrt.E_NyctTripDescriptor) &&
 		e.opts.FilterStaleUnassignedTrips && isStaleUnassignedTrip(isAssigned, trip.StopTimeUpdate, feedCreatedAt)
 	return extensions.UpdateTripResult{
-		ShouldSkip:     shouldSkip,
-		NyctIsAssigned: isAssigned,
+		ShouldSkip: shouldSkip,
 	}
 }
 
@@ -70,9 +68,11 @@ func (e extension) updateTripOrVehicle(entity tripOrVehicle) bool {
 	nyctTripDesc, _ := extendedEvent.(*gtfsrt.NyctTripDescriptor)
 
 	if nyctTripDesc.GetIsAssigned() {
-		// TODO: is it possible the train ID is not set?
-		// TODO: is it possible there is already a vehicle descriptor here
 		id := nyctTripDesc.GetTrainId()
+		if id == "" {
+			// TODO: slog
+			fmt.Printf("assigned trip %s has no train ID", tripDesc.GetTripId())
+		}
 		setVehicleDescriptor(entity, &gtfsrt.VehicleDescriptor{
 			Id: &id,
 		})
@@ -101,8 +101,16 @@ func (e extension) updateTripOrVehicle(entity tripOrVehicle) bool {
 func setVehicleDescriptor(entity tripOrVehicle, vehicleDesc *gtfsrt.VehicleDescriptor) {
 	switch t := entity.(type) {
 	case *gtfsrt.TripUpdate:
+		if t.Vehicle != nil {
+			// TODO: slog
+			fmt.Printf("overwriting vehicle descriptor on trip update %s", t.GetTrip().GetTripId())
+		}
 		t.Vehicle = vehicleDesc
 	case *gtfsrt.VehiclePosition:
+		if t.Vehicle != nil {
+			// TODO: slog
+			fmt.Printf("overwriting vehicle descriptor on vehicle position %v", t.GetVehicle())
+		}
 		t.Vehicle = vehicleDesc
 	}
 }

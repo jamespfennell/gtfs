@@ -66,12 +66,6 @@ func TestHashTrip(t *testing.T) {
 			},
 		},
 		{
-			"nyct_is_assigned",
-			func(t *Trip) any {
-				return &t.NyctIsAssigned
-			},
-		},
-		{
 			"stop_time_updates[0].stop_sequence",
 			func(t *Trip) any {
 				return &t.StopTimeUpdates[0].StopSequence
@@ -325,7 +319,6 @@ func mkTrip(i int) Trip {
 				NyctTrack: ptr("stop_time_updates.0.nyct_track"),
 			},
 		},
-		NyctIsAssigned: true,
 	}
 }
 

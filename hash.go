@@ -44,7 +44,6 @@ func (h *hasher) trip(t *Trip) {
 	h.number(t.ID.StartDate.Unix())
 	h.number(t.ID.HasStartTime)
 	h.number(t.ID.StartTime)
-	h.number(t.NyctIsAssigned)
 	h.number(int64(len(t.StopTimeUpdates)))
 	for i := range t.StopTimeUpdates {
 		stu := &t.StopTimeUpdates[i]

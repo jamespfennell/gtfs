@@ -25,7 +25,6 @@ type Realtime struct {
 type Trip struct {
 	ID              TripID
 	StopTimeUpdates []StopTimeUpdate
-	NyctIsAssigned  bool
 
 	Vehicle *Vehicle
 
