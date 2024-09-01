@@ -1011,6 +1011,111 @@ func TestParse(t *testing.T) {
 				},
 			},
 		},
+		{
+			desc: "stop inherits parent wheelchair boarding, accessible",
+			content: newZipBuilder().add(
+				"stops.txt",
+				"stop_id,location_type,parent_station,wheelchair_boarding",
+				"a,,b,",
+				"b,1,,1",
+			).build(),
+			opts: ParseStaticOptions{
+				InheritWheelchairBoarding: true,
+			},
+			expected: &Static{
+				Stops: []Stop{
+					{
+						Id:                 "a",
+						Type:               StopType_Platform,
+						Parent:             &Stop{Id: "b", WheelchairBoarding: WheelchairBoarding_Possible, Type: StopType_Station},
+						WheelchairBoarding: WheelchairBoarding_Possible,
+					},
+					{
+						Id:                 "b",
+						Type:               StopType_Station,
+						WheelchairBoarding: WheelchairBoarding_Possible,
+					},
+				},
+			},
+		},
+		{
+			desc: "stop inherits parent wheelchair boarding, inaccessible",
+			content: newZipBuilder().add(
+				"stops.txt",
+				"stop_id,location_type,parent_station,wheelchair_boarding",
+				"a,,b,",
+				"b,1,,2",
+			).build(),
+			opts: ParseStaticOptions{
+				InheritWheelchairBoarding: true,
+			},
+			expected: &Static{
+				Stops: []Stop{
+					{
+						Id:                 "a",
+						Type:               StopType_Platform,
+						Parent:             &Stop{Id: "b", WheelchairBoarding: WheelchairBoarding_NotPossible, Type: StopType_Station},
+						WheelchairBoarding: WheelchairBoarding_NotPossible,
+					},
+					{
+						Id:                 "b",
+						Type:               StopType_Station,
+						WheelchairBoarding: WheelchairBoarding_NotPossible,
+					},
+				},
+			},
+		},
+		{
+			desc: "stop doesn't inherit parent wheelchair boarding when option is false",
+			content: newZipBuilder().add(
+				"stops.txt",
+				"stop_id,location_type,parent_station,wheelchair_boarding",
+				"a,,b,",
+				"b,1,,1",
+			).build(),
+			opts: ParseStaticOptions{
+				InheritWheelchairBoarding: false,
+			},
+			expected: &Static{
+				Stops: []Stop{
+					{
+						Id:                 "a",
+						Type:               StopType_Platform,
+						Parent:             &Stop{Id: "b", WheelchairBoarding: WheelchairBoarding_Possible, Type: StopType_Station},
+						WheelchairBoarding: WheelchairBoarding_NotSpecified,
+					},
+					{
+						Id:                 "b",
+						Type:               StopType_Station,
+						WheelchairBoarding: WheelchairBoarding_Possible,
+					},
+				},
+			},
+		},
+		{
+			desc: "stop doesn't inherit parent wheelchair boarding by default",
+			content: newZipBuilder().add(
+				"stops.txt",
+				"stop_id,location_type,parent_station,wheelchair_boarding",
+				"a,,b,",
+				"b,1,,1",
+			).build(),
+			expected: &Static{
+				Stops: []Stop{
+					{
+						Id:                 "a",
+						Type:               StopType_Platform,
+						Parent:             &Stop{Id: "b", WheelchairBoarding: WheelchairBoarding_Possible, Type: StopType_Station},
+						WheelchairBoarding: WheelchairBoarding_NotSpecified,
+					},
+					{
+						Id:                 "b",
+						Type:               StopType_Station,
+						WheelchairBoarding: WheelchairBoarding_Possible,
+					},
+				},
+			},
+		},
 	} {
 		t.Run(tc.desc, func(t *testing.T) {
 			actual, err := ParseStatic(tc.content, tc.opts)
