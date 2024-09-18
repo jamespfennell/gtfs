@@ -149,7 +149,11 @@ type Frequency struct {
 	ExactTimes ExactTimes
 }
 
-type ParseStaticOptions struct{}
+type ParseStaticOptions struct {
+	// If true, wheelchair boarding information is inherited from parent station
+	// when unspecified for a child stop/platform, entrance, or exit.
+	InheritWheelchairBoarding bool
+}
 
 // ParseStatic parses the content as a GTFS static feed.
 func ParseStatic(content []byte, opts ParseStaticOptions) (*Static, error) {
@@ -275,6 +279,16 @@ func ParseStatic(content []byte, opts ParseStaticOptions) (*Static, error) {
 		table.Action(file)
 		if err := file.Close(); err != nil {
 			return nil, fmt.Errorf("failed to read %q: %w", table.File, err)
+		}
+	}
+
+	// Inherit wheelchair boarding from parent stops if specified.
+	if opts.InheritWheelchairBoarding {
+		for i := range result.Stops {
+			stop := &result.Stops[i]
+			if stop.Parent != nil && stop.Parent.Type == StopType_Station && stop.WheelchairBoarding == WheelchairBoarding_NotSpecified {
+				stop.WheelchairBoarding = stop.Parent.WheelchairBoarding
+			}
 		}
 	}
 
