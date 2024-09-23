@@ -45,11 +45,13 @@ func (h *hasher) trip(t *Trip) {
 	h.number(t.ID.HasStartTime)
 	h.number(t.ID.StartTime)
 	h.number(int64(len(t.StopTimeUpdates)))
+	h.number(t.ID.ScheduleRelationship)
 	for i := range t.StopTimeUpdates {
 		stu := &t.StopTimeUpdates[i]
 		hashNumberPtr(h, stu.StopSequence)
 		h.stringPtr(stu.StopID)
 		h.stringPtr(stu.NyctTrack)
+		h.number(stu.ScheduleRelationship)
 		for _, event := range []*StopTimeEvent{stu.Arrival, stu.Departure} {
 			h.number(event == nil)
 			if event == nil {
