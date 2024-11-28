@@ -566,23 +566,88 @@ func parseAlert(ID string, alert *gtfsrt.Alert, opts *ParseRealtimeOptions) (*Al
 	}
 	var informedEntities []AlertInformedEntity
 	var trips []Trip
+	var informedRoutes = make(map[string]bool)
+	var informedRoutesFromTripIDs = make(map[string]map[DirectionID]bool)
 	for _, entity := range alert.GetInformedEntity() {
 		tripIDOrNil := parseOptionalTripDescriptor(entity.Trip, opts)
-		informedEntities = append(informedEntities, AlertInformedEntity{
+
+		// Handle the case where the trip descriptor's doesn't map to a trip instance but the route ID is not.
+		// In such cases, we can inform the route in one or both directions.
+		// Such cases are not handled by the GTFS-realtime spec, but occur in some feeds such
+		// as the MTA bus alerts feed. See: https://groups.google.com/g/mtadeveloperresources/c/pn_EupBj1nY
+		if tripIDOrNil != nil && !tripIDUniquelyIdentifiesTrip(tripIDOrNil) && tripIDOrNil.RouteID != "" {
+			if tripIDOrNil.DirectionID == DirectionID_Unspecified {
+				informedRoutesFromTripIDs[tripIDOrNil.RouteID] = map[DirectionID]bool{
+					DirectionID_False: true,
+					DirectionID_True:  true,
+				}
+			} else {
+				if _, ok := informedRoutesFromTripIDs[tripIDOrNil.RouteID]; !ok {
+					informedRoutesFromTripIDs[tripIDOrNil.RouteID] = map[DirectionID]bool{}
+				}
+				informedRoutesFromTripIDs[tripIDOrNil.RouteID][tripIDOrNil.DirectionID] = true
+			}
+		}
+		if entity.RouteId != nil {
+			informedRoutes[*entity.RouteId] = true
+		}
+
+		informedEntity := AlertInformedEntity{
 			AgencyID:    entity.AgencyId,
 			RouteID:     entity.RouteId,
 			RouteType:   parseRouteType_GTFSRealtime(entity.RouteType),
 			DirectionID: parseDirectionID_GTFSRealtime(entity.DirectionId),
 			TripID:      tripIDOrNil,
 			StopID:      entity.StopId,
-		})
-		if tripIDOrNil != nil {
+		}
+
+		// Ensure at least one entity is informed
+		if !alertInformedEntityInformsAtLeastOneEntity(informedEntity) {
+			continue
+		}
+
+		if tripIDUniquelyIdentifiesTrip(tripIDOrNil) {
 			trips = append(trips, Trip{
 				ID:                *tripIDOrNil,
 				IsEntityInMessage: false,
 			})
+		} else {
+			// Clear the trip ID if it doesn't uniquely identify a trip
+			informedEntity.TripID = nil
+		}
+
+		informedEntities = append(informedEntities, informedEntity)
+	}
+
+	for routeID, directions := range informedRoutesFromTripIDs {
+		if informedRoutes[routeID] {
+			continue
+		}
+
+		routeIDCopy := routeID
+		if directions[DirectionID_False] && directions[DirectionID_True] {
+			// Inform the route in both directions
+			informedEntities = append(informedEntities, AlertInformedEntity{
+				RouteID:   &routeIDCopy,
+				RouteType: RouteType_Unknown,
+			})
+		} else {
+			// Inform the route in one direction
+			var informedDirection DirectionID
+			if directions[DirectionID_False] {
+				informedDirection = DirectionID_False
+			} else {
+				informedDirection = DirectionID_True
+			}
+
+			informedEntities = append(informedEntities, AlertInformedEntity{
+				RouteID:     &routeIDCopy,
+				RouteType:   RouteType_Unknown,
+				DirectionID: informedDirection,
+			})
 		}
 	}
+
 	gtfsAlert := &Alert{
 		ID:               ID,
 		ActivePeriods:    activePeriods,
@@ -613,4 +678,15 @@ func convertOptionalTimestamp(in *uint64, timezone *time.Location) *time.Time {
 	}
 	out := time.Unix(int64(*in), 0).In(timezone)
 	return &out
+}
+
+func alertInformedEntityInformsAtLeastOneEntity(alertInformedEntity AlertInformedEntity) bool {
+	return (alertInformedEntity.AgencyID != nil || alertInformedEntity.RouteID != nil ||
+		alertInformedEntity.RouteType != RouteType_Unknown || tripIDUniquelyIdentifiesTrip(alertInformedEntity.TripID) ||
+		alertInformedEntity.StopID != nil)
+}
+
+func tripIDUniquelyIdentifiesTrip(tripID *TripID) bool {
+	return tripID != nil &&
+		(tripID.ID != "" || (tripID.RouteID != "" && tripID.DirectionID != DirectionID_Unspecified && tripID.HasStartTime && tripID.HasStartDate))
 }
