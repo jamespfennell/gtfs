@@ -12,8 +12,12 @@ import (
 
 const (
 	tripID1    = "tripID1"
+	tripID2    = "tripID2"
+	tripID3    = "tripID3"
 	vehicleID1 = "vehicleID1"
 	stopID1    = "stopID1"
+	stopID2    = "stopID2"
+	stopID3    = "stopID3"
 )
 
 var createTime time.Time = time.Unix(2<<28, 0).UTC()
@@ -41,6 +45,46 @@ func TestRealtime(t *testing.T) {
 						// TODO: other fields
 					},
 				},
+				{
+					Id: ptr("2"),
+					TripUpdate: &gtfsrt.TripUpdate{
+						Trip: &gtfsrt.TripDescriptor{
+							TripId:               ptr(tripID2),
+							ScheduleRelationship: ptr(gtfsrt.TripDescriptor_ADDED),
+						},
+						StopTimeUpdate: []*gtfsrt.TripUpdate_StopTimeUpdate{
+							{
+								StopId:       ptr(stopID1),
+								StopSequence: ptr(uint32(1)),
+								Arrival: &gtfsrt.TripUpdate_StopTimeEvent{
+									Time: ptr(int64(time1.Unix())),
+								},
+							},
+							{
+								StopId:               ptr(stopID2),
+								StopSequence:         ptr(uint32(2)),
+								ScheduleRelationship: ptr(gtfsrt.TripUpdate_StopTimeUpdate_SKIPPED),
+								Arrival: &gtfsrt.TripUpdate_StopTimeEvent{
+									Time: ptr(int64(time2.Unix())),
+								},
+							},
+							{
+								StopId:               ptr(stopID3),
+								StopSequence:         ptr(uint32(3)),
+								ScheduleRelationship: ptr(gtfsrt.TripUpdate_StopTimeUpdate_NO_DATA),
+							},
+						},
+					},
+				},
+				{
+					Id: ptr("3"),
+					TripUpdate: &gtfsrt.TripUpdate{
+						Trip: &gtfsrt.TripDescriptor{
+							TripId:               ptr(tripID3),
+							ScheduleRelationship: ptr(gtfsrt.TripDescriptor_CANCELED),
+						},
+					},
+				},
 			},
 			want: func() *gtfs.Realtime {
 				trip := gtfs.Trip{
@@ -58,9 +102,48 @@ func TestRealtime(t *testing.T) {
 				}
 				trip.Vehicle = &vehicle
 				vehicle.Trip = &trip
+
+				trip2 := gtfs.Trip{
+					ID: gtfs.TripID{
+						ID:                   tripID2,
+						ScheduleRelationship: gtfsrt.TripDescriptor_ADDED,
+					},
+					StopTimeUpdates: []gtfs.StopTimeUpdate{
+						{
+							StopID:       ptr(stopID1),
+							StopSequence: ptr(uint32(1)),
+							Arrival: &gtfs.StopTimeEvent{
+								Time: &time1,
+							},
+						},
+						{
+							StopID:       ptr(stopID2),
+							StopSequence: ptr(uint32(2)),
+							Arrival: &gtfs.StopTimeEvent{
+								Time: &time2,
+							},
+							ScheduleRelationship: gtfsrt.TripUpdate_StopTimeUpdate_SKIPPED,
+						},
+						{
+							StopID:               ptr(stopID3),
+							StopSequence:         ptr(uint32(3)),
+							ScheduleRelationship: gtfsrt.TripUpdate_StopTimeUpdate_NO_DATA,
+						},
+					},
+					IsEntityInMessage: true,
+				}
+
+				trip3 := gtfs.Trip{
+					ID: gtfs.TripID{
+						ID:                   tripID3,
+						ScheduleRelationship: gtfsrt.TripDescriptor_CANCELED,
+					},
+					IsEntityInMessage: true,
+				}
+
 				return &gtfs.Realtime{
 					CreatedAt: createTime,
-					Trips:     []gtfs.Trip{trip},
+					Trips:     []gtfs.Trip{trip, trip2, trip3},
 					Vehicles:  []gtfs.Vehicle{vehicle},
 				}
 			}(),

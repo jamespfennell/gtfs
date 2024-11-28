@@ -3,6 +3,7 @@ package gtfs
 import (
 	"fmt"
 	"regexp"
+	"sort"
 	"strconv"
 	"time"
 
@@ -38,6 +39,8 @@ func (trip *Trip) GetVehicle() Vehicle {
 	return Vehicle{}
 }
 
+type TripScheduleRelationship = gtfsrt.TripDescriptor_ScheduleRelationship
+
 type TripID struct {
 	ID          string
 	RouteID     string
@@ -48,15 +51,46 @@ type TripID struct {
 
 	HasStartDate bool
 	StartDate    time.Time
+
+	ScheduleRelationship TripScheduleRelationship
 }
+
+// Define ordering on trip ids for test consistency
+func (t1 TripID) Less(t2 TripID) bool {
+	if t1.ID != t2.ID {
+		return t1.ID < t2.ID
+	}
+	if t1.RouteID != t2.RouteID {
+		return t1.RouteID < t2.RouteID
+	}
+	if t1.DirectionID != t2.DirectionID {
+		return t1.DirectionID < t2.DirectionID
+	}
+	if t1.HasStartTime != t2.HasStartTime {
+		return !t1.HasStartTime && t2.HasStartTime
+	}
+	if t1.HasStartTime && t1.StartTime != t2.StartTime {
+		return t1.StartTime < t2.StartTime
+	}
+	if t1.HasStartDate != t2.HasStartDate {
+		return !t1.HasStartDate && t2.HasStartDate
+	}
+	if t1.HasStartDate && !t1.StartDate.Equal(t2.StartDate) {
+		return t1.StartDate.Before(t2.StartDate)
+	}
+	return t1.ScheduleRelationship < t2.ScheduleRelationship
+}
+
+type StopTimeUpdateScheduleRelationship = gtfsrt.TripUpdate_StopTimeUpdate_ScheduleRelationship
 
 // TODO: shouldn't this just be StopTime?
 type StopTimeUpdate struct {
-	StopSequence *uint32
-	StopID       *string
-	Arrival      *StopTimeEvent
-	Departure    *StopTimeEvent
-	NyctTrack    *string
+	StopSequence         *uint32
+	StopID               *string
+	Arrival              *StopTimeEvent
+	Departure            *StopTimeEvent
+	NyctTrack            *string
+	ScheduleRelationship StopTimeUpdateScheduleRelationship
 }
 
 func (stopTimeUpdate *StopTimeUpdate) GetArrival() StopTimeEvent {
@@ -327,6 +361,10 @@ func ParseRealtime(content []byte, opts *ParseRealtimeOptions) (*Realtime, error
 		result.Trips = append(result.Trips, *trip)
 	}
 
+	sort.Slice(result.Trips, func(i, j int) bool {
+		return result.Trips[i].ID.Less(result.Trips[j].ID)
+	})
+
 	for vehicleID, vehicle := range vehiclesByID {
 		if tripID, ok := vehicleIDToTripID[vehicleID]; ok {
 			vehicle.Trip = tripsById[tripID]
@@ -364,11 +402,12 @@ func parseTripUpdate(tripUpdate *gtfsrt.TripUpdate, opts *ParseRealtimeOptions) 
 	}
 	for _, stopTimeUpdate := range tripUpdate.StopTimeUpdate {
 		trip.StopTimeUpdates = append(trip.StopTimeUpdates, StopTimeUpdate{
-			StopSequence: stopTimeUpdate.StopSequence,
-			StopID:       stopTimeUpdate.StopId,
-			Arrival:      convertStopTimeEvent(stopTimeUpdate.Arrival),
-			Departure:    convertStopTimeEvent(stopTimeUpdate.Departure),
-			NyctTrack:    opts.Extension.GetTrack(stopTimeUpdate),
+			StopSequence:         stopTimeUpdate.StopSequence,
+			StopID:               stopTimeUpdate.StopId,
+			Arrival:              convertStopTimeEvent(stopTimeUpdate.Arrival),
+			Departure:            convertStopTimeEvent(stopTimeUpdate.Departure),
+			NyctTrack:            opts.Extension.GetTrack(stopTimeUpdate),
+			ScheduleRelationship: stopTimeUpdate.GetScheduleRelationship(),
 		})
 	}
 	if tripUpdate.Vehicle == nil {
@@ -454,9 +493,10 @@ func parseOptionalTripDescriptor(tripDesc *gtfsrt.TripDescriptor, opts *ParseRea
 
 func parseTripDescriptor(tripDesc *gtfsrt.TripDescriptor, opts *ParseRealtimeOptions) TripID {
 	id := TripID{
-		ID:          tripDesc.GetTripId(),
-		RouteID:     tripDesc.GetRouteId(),
-		DirectionID: parseDirectionID_GTFSRealtime(tripDesc.DirectionId),
+		ID:                   tripDesc.GetTripId(),
+		RouteID:              tripDesc.GetRouteId(),
+		DirectionID:          parseDirectionID_GTFSRealtime(tripDesc.DirectionId),
+		ScheduleRelationship: tripDesc.GetScheduleRelationship(),
 	}
 	id.HasStartTime, id.StartTime = parseStartTime(tripDesc.StartTime)
 	id.HasStartDate, id.StartDate = parseStartDate(tripDesc.StartDate, opts.timezoneOrUTC())
