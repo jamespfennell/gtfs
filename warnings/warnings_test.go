@@ -1,7 +1,7 @@
 package warnings
 
-// Verify that StaticWarning satisfies the error interface.
+// Verify that StaticWarningKind satisfies the error interface.
 var (
-	w StaticWarning = nil
-	e error         = w
+	w StaticWarningKind = nil
+	e error             = w
 )

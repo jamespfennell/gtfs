@@ -335,8 +335,8 @@ func parseAgencies(csv *csv.File) ([]Agency, []warnings.StaticWarning) {
 	fareUrlColumn := csv.OptionalColumn("agency_fare_url")
 	emailColumn := csv.OptionalColumn("agency_email")
 
-	if missing := csv.MissingRequiredColumns(); missing != nil {
-		return nil, newMissingColumnsWarning(missing, constants.AgencyFile)
+	if warnings := checkForMissingColumns(csv, constants.AgencyFile); warnings != nil {
+		return nil, warnings
 	}
 
 	var agencies []Agency
@@ -354,10 +354,10 @@ func parseAgencies(csv *csv.File) ([]Agency, []warnings.StaticWarning) {
 			Email:    emailColumn.Read(),
 		}
 		if missingKeys := csv.MissingRowKeys(); len(missingKeys) > 0 {
-			w = append(w, warnings.AgencyMissingColumns{
+			w = append(w, warnings.NewStaticWarning(constants.AgencyFile, csv, warnings.AgencyMissingValues{
 				AgencyID: agency.Id,
 				Columns:  missingKeys,
-			})
+			}))
 			continue
 		}
 		agencies = append(agencies, agency)
@@ -987,11 +987,12 @@ func parseFrequencies(csv *csv.File, tripIDToScheduledTrip map[string]*Scheduled
 	}
 }
 
-func newMissingColumnsWarning(columns []string, file constants.StaticFile) []warnings.StaticWarning {
+func checkForMissingColumns(csv *csv.File, file constants.StaticFile) []warnings.StaticWarning {
+	missing := csv.MissingRequiredColumns()
+	if len(missing) == 0 {
+		return nil
+	}
 	return []warnings.StaticWarning{
-		warnings.MissingColumns{
-			File_:   file,
-			Columns: columns,
-		},
+		warnings.NewStaticWarning(file, csv, warnings.MissingColumns{Columns: missing}),
 	}
 }

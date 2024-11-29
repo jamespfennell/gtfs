@@ -84,15 +84,20 @@ func TestParse(t *testing.T) {
 			).build(),
 			expected: &Static{
 				Warnings: []warnings.StaticWarning{
-					warnings.MissingColumns{
-						File_:   constants.AgencyFile,
-						Columns: []string{"agency_name"},
+					{
+						Kind: warnings.MissingColumns{
+							Columns: []string{"agency_name"},
+						},
+						File:          constants.AgencyFile,
+						RowNumber:     0,
+						RowContent:    []string{"agency_id", "agency_url", "agency_timezone"},
+						HeaderContent: []string{"agency_id", "agency_url", "agency_timezone"},
 					},
 				},
 			},
 		},
 		{
-			desc: "agency with missing columns",
+			desc: "agency with missing values",
 			content: newZipBuilder().add(
 				"agency.txt",
 				"agency_id,agency_name,agency_url,agency_timezone\na,b,c,d\ne,,g,h",
@@ -107,9 +112,15 @@ func TestParse(t *testing.T) {
 					},
 				},
 				Warnings: []warnings.StaticWarning{
-					warnings.AgencyMissingColumns{
-						AgencyID: "e",
-						Columns:  []string{"agency_name"},
+					{
+						Kind: warnings.AgencyMissingValues{
+							AgencyID: "e",
+							Columns:  []string{"agency_name"},
+						},
+						File:          constants.AgencyFile,
+						RowNumber:     2,
+						RowContent:    []string{"e", "", "g", "h"},
+						HeaderContent: []string{"agency_id", "agency_name", "agency_url", "agency_timezone"},
 					},
 				},
 			},
