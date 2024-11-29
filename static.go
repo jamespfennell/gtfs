@@ -292,7 +292,8 @@ func ParseStatic(content []byte, opts ParseStaticOptions) (*Static, error) {
 		if err != nil {
 			return nil, fmt.Errorf("failed to read %q: %w", table.File, err)
 		}
-		table.Action(file)
+		w := table.Action(file)
+		result.Warnings = append(result.Warnings, w...)
 		if err := file.Close(); err != nil {
 			return nil, fmt.Errorf("failed to read %q: %w", table.File, err)
 		}
@@ -340,10 +341,11 @@ func parseAgencies(csv *csv.File) ([]Agency, []warnings.StaticWarning) {
 
 	var agencies []Agency
 	for csv.NextRow() {
+		name := nameColumn.Read()
 		agency := Agency{
 			// TODO: support specifying the default agency ID in the GTFS static parser settings
-			Id:       idColumn.ReadOr(fmt.Sprintf("%s_id", nameColumn.Read())),
-			Name:     nameColumn.Read(),
+			Id:       idColumn.ReadOr(fmt.Sprintf("%s_id", name)),
+			Name:     name,
 			Url:      urlColumn.Read(),
 			Timezone: timezoneColumn.Read(),
 			Language: languageColumn.Read(),
@@ -988,7 +990,7 @@ func parseFrequencies(csv *csv.File, tripIDToScheduledTrip map[string]*Scheduled
 func newMissingColumnsWarning(columns []string, file constants.StaticFile) []warnings.StaticWarning {
 	return []warnings.StaticWarning{
 		warnings.MissingColumns{
-			File_:   constants.AgencyFile,
+			File_:   file,
 			Columns: columns,
 		},
 	}

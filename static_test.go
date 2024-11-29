@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/jamespfennell/gtfs/constants"
+	"github.com/jamespfennell/gtfs/warnings"
 )
 
 var (
@@ -70,6 +72,44 @@ func TestParse(t *testing.T) {
 						Name:     "b",
 						Url:      "c",
 						Timezone: "d",
+					},
+				},
+			},
+		},
+		{
+			desc: "agency file with missing columns",
+			content: newZipBuilder().add(
+				"agency.txt",
+				"agency_id,agency_url,agency_timezone\na,c,d",
+			).build(),
+			expected: &Static{
+				Warnings: []warnings.StaticWarning{
+					warnings.MissingColumns{
+						File_:   constants.AgencyFile,
+						Columns: []string{"agency_name"},
+					},
+				},
+			},
+		},
+		{
+			desc: "agency with missing columns",
+			content: newZipBuilder().add(
+				"agency.txt",
+				"agency_id,agency_name,agency_url,agency_timezone\na,b,c,d\ne,,g,h",
+			).build(),
+			expected: &Static{
+				Agencies: []Agency{
+					{
+						Id:       "a",
+						Name:     "b",
+						Url:      "c",
+						Timezone: "d",
+					},
+				},
+				Warnings: []warnings.StaticWarning{
+					warnings.AgencyMissingColumns{
+						AgencyID: "e",
+						Columns:  []string{"agency_name"},
 					},
 				},
 			},
@@ -1123,7 +1163,7 @@ func TestParse(t *testing.T) {
 				t.Errorf("error when parsing: %s", err)
 			}
 			if diff := cmp.Diff(actual, tc.expected); diff != "" {
-				t.Errorf("not the same: \n%+v != \n%+v\ndiff:%s", actual, tc.expected, diff)
+				t.Errorf("not the same: \ngot: %+v != \nwant:%+v\ndiff:%s", actual, tc.expected, diff)
 			}
 		})
 	}
