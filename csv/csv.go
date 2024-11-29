@@ -16,6 +16,8 @@ import (
 type File struct {
 	csvReader              *csv.Reader
 	headerMap              map[string]int
+	headerContent          []string
+	rowNumber              int
 	missingRequiredColumns []string
 	currentRow             *row
 	ioErr                  error
@@ -29,8 +31,10 @@ type row struct {
 
 func New(reader io.ReadCloser) (*File, error) {
 	csvReader := BOMAwareCSVReader(reader)
-	csvReader.ReuseRecord = true
 	firstRow, err := csvReader.Read()
+	// We don't reuse the first/header record as we keep this around
+	// for populating static warnings.
+	csvReader.ReuseRecord = true
 	if err == io.EOF {
 		reader.Close()
 		return nil, fmt.Errorf("CSV file contains no rows")
@@ -43,10 +47,15 @@ func New(reader io.ReadCloser) (*File, error) {
 		m[colHeader] = i
 	}
 	return &File{
-		headerMap: m,
-		csvReader: csvReader,
-		closer:    reader.Close,
+		headerMap:     m,
+		headerContent: firstRow,
+		csvReader:     csvReader,
+		closer:        reader.Close,
 	}, nil
+}
+
+func (f *File) HeaderContent() []string {
+	return f.headerContent
 }
 
 type RequiredColumn struct {
@@ -64,11 +73,11 @@ func (f *File) RequiredColumn(s string) RequiredColumn {
 	return RequiredColumn{i, s, f}
 }
 
-func (p *File) MissingRequiredColumns() error {
+func (p *File) MissingRequiredColumns() []string {
 	if len(p.missingRequiredColumns) == 0 {
 		return nil
 	}
-	return fmt.Errorf("missing required columns %s", p.missingRequiredColumns)
+	return p.missingRequiredColumns
 }
 
 func (c RequiredColumn) Read() string {
@@ -123,9 +132,24 @@ func (f *File) NextRow() bool {
 	if f.currentRow == nil {
 		f.currentRow = &row{}
 	}
+	f.rowNumber += 1
 	f.currentRow.cells = cells
 	f.currentRow.missingKeys = nil
 	return true
+}
+
+func (f *File) RowContent() []string {
+	if f.rowNumber == 0 {
+		return f.HeaderContent()
+	}
+	if f.currentRow == nil {
+		return []string{}
+	}
+	return f.currentRow.cells
+}
+
+func (f *File) RowNumber() int {
+	return f.rowNumber
 }
 
 func (f *File) MissingRowKeys() []string {
