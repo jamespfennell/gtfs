@@ -26,6 +26,9 @@ type Static struct {
 	Services  []Service
 	Trips     []ScheduledTrip
 	Shapes    []Shape
+
+	// Warnings raised during GTFS static parsing.
+	Warnings []warnings.StaticWarning
 }
 
 // Agency corresponds to a single row in the agency.txt file.
@@ -40,6 +43,7 @@ type Agency struct {
 	Email    string
 }
 
+// Route corresponds to a single row in the routes.txt file.
 type Route struct {
 	Id                string
 	Agency            *Agency
@@ -330,9 +334,8 @@ func parseAgencies(csv *csv.File) ([]Agency, []warnings.StaticWarning) {
 	fareUrlColumn := csv.OptionalColumn("agency_fare_url")
 	emailColumn := csv.OptionalColumn("agency_email")
 
-	if err := csv.MissingRequiredColumns(); err != nil {
-		fmt.Println(err)
-		return nil, nil
+	if missing := csv.MissingRequiredColumns(); missing != nil {
+		return nil, newMissingColumnsWarning(missing, constants.AgencyFile)
 	}
 
 	var agencies []Agency
@@ -350,10 +353,9 @@ func parseAgencies(csv *csv.File) ([]Agency, []warnings.StaticWarning) {
 		}
 		if missingKeys := csv.MissingRowKeys(); len(missingKeys) > 0 {
 			w = append(w, warnings.AgencyMissingColumns{
-				AgencyID:    agency.Id,
-				MissingKeys: missingKeys,
+				AgencyID: agency.Id,
+				Columns:  missingKeys,
 			})
-			log.Printf("Skipping agency %+v because of missing keys %s", agency, missingKeys)
 			continue
 		}
 		agencies = append(agencies, agency)
@@ -980,5 +982,14 @@ func parseFrequencies(csv *csv.File, tripIDToScheduledTrip map[string]*Scheduled
 		}
 
 		scheduledTripOrNil.Frequencies = append(scheduledTripOrNil.Frequencies, frequency)
+	}
+}
+
+func newMissingColumnsWarning(columns []string, file constants.StaticFile) []warnings.StaticWarning {
+	return []warnings.StaticWarning{
+		warnings.MissingColumns{
+			File_:   constants.AgencyFile,
+			Columns: columns,
+		},
 	}
 }

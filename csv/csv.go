@@ -64,11 +64,11 @@ func (f *File) RequiredColumn(s string) RequiredColumn {
 	return RequiredColumn{i, s, f}
 }
 
-func (p *File) MissingRequiredColumns() error {
+func (p *File) MissingRequiredColumns() []string {
 	if len(p.missingRequiredColumns) == 0 {
 		return nil
 	}
-	return fmt.Errorf("missing required columns %s", p.missingRequiredColumns)
+	return p.missingRequiredColumns
 }
 
 func (c RequiredColumn) Read() string {
