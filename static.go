@@ -168,9 +168,9 @@ func ParseStatic(content []byte, opts ParseStaticOptions) (*Static, error) {
 		return nil, err
 	}
 	result := &Static{}
-	fileNameToFile := map[string]*zip.File{}
+	fileNameToFile := map[constants.StaticFile]*zip.File{}
 	for _, file := range reader.File {
-		fileNameToFile[file.Name] = file
+		fileNameToFile[constants.StaticFile(file.Name)] = file
 	}
 	serviceIdToService := map[string]Service{}
 	shapeIdToShape := map[string]*Shape{}
@@ -279,7 +279,7 @@ func ParseStatic(content []byte, opts ParseStaticOptions) (*Static, error) {
 			},
 		},
 	} {
-		zipFile := fileNameToFile[string(table.File)]
+		zipFile := fileNameToFile[table.File]
 		if zipFile == nil {
 			if table.Optional {
 				// TODO: this is a bit hacky. Maybe have a table.PostAction() that is invoked instead?
