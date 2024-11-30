@@ -288,7 +288,7 @@ func ParseStatic(content []byte, opts ParseStaticOptions) (*Static, error) {
 			}
 			return nil, fmt.Errorf("no %q file in GTFS static feed", table.File)
 		}
-		file, err := readCsvFile(zipFile)
+		file, err := openCsvFile(table.File, zipFile)
 		if err != nil {
 			return nil, fmt.Errorf("failed to read %q: %w", table.File, err)
 		}
@@ -312,12 +312,12 @@ func ParseStatic(content []byte, opts ParseStaticOptions) (*Static, error) {
 	return result, nil
 }
 
-func readCsvFile(zipFile *zip.File) (*csv.File, error) {
+func openCsvFile(file constants.StaticFile, zipFile *zip.File) (*csv.File, error) {
 	content, err := zipFile.Open()
 	if err != nil {
 		return nil, err
 	}
-	f, err := csv.New(content)
+	f, err := csv.New(file, content)
 	if err != nil {
 		return nil, err
 	}
@@ -335,7 +335,7 @@ func parseAgencies(csv *csv.File) ([]Agency, []warnings.StaticWarning) {
 	fareUrlColumn := csv.OptionalColumn("agency_fare_url")
 	emailColumn := csv.OptionalColumn("agency_email")
 
-	if warnings := checkForMissingColumns(csv, constants.AgencyFile); warnings != nil {
+	if warnings := checkForMissingColumns(csv); len(warnings) > 0 {
 		return nil, warnings
 	}
 
@@ -354,7 +354,7 @@ func parseAgencies(csv *csv.File) ([]Agency, []warnings.StaticWarning) {
 			Email:    emailColumn.Read(),
 		}
 		if missingKeys := csv.MissingRowKeys(); len(missingKeys) > 0 {
-			w = append(w, warnings.NewStaticWarning(constants.AgencyFile, csv, warnings.AgencyMissingValues{
+			w = append(w, warnings.NewStaticWarning(csv, warnings.AgencyMissingValues{
 				AgencyID: agency.Id,
 				Columns:  missingKeys,
 			}))
@@ -987,12 +987,12 @@ func parseFrequencies(csv *csv.File, tripIDToScheduledTrip map[string]*Scheduled
 	}
 }
 
-func checkForMissingColumns(csv *csv.File, file constants.StaticFile) []warnings.StaticWarning {
+func checkForMissingColumns(csv *csv.File) []warnings.StaticWarning {
 	missing := csv.MissingRequiredColumns()
 	if len(missing) == 0 {
 		return nil
 	}
 	return []warnings.StaticWarning{
-		warnings.NewStaticWarning(file, csv, warnings.MissingColumns{Columns: missing}),
+		warnings.NewStaticWarning(csv, warnings.MissingColumns{Columns: missing}),
 	}
 }
