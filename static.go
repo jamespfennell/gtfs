@@ -206,7 +206,7 @@ func ParseStatic(content []byte, opts ParseStaticOptions) (*Static, error) {
 		{
 			File: "stops.txt",
 			Action: func(file *csv.File) (w []warnings.StaticWarning) {
-				result.Stops = parseStops(file)
+				result.Stops = parseStops(file, opts.InheritWheelchairBoarding)
 				return
 			},
 		},
@@ -298,17 +298,6 @@ func ParseStatic(content []byte, opts ParseStaticOptions) (*Static, error) {
 			return nil, fmt.Errorf("failed to read %q: %w", table.File, err)
 		}
 	}
-
-	// Inherit wheelchair boarding from parent stops if specified.
-	if opts.InheritWheelchairBoarding {
-		for i := range result.Stops {
-			stop := &result.Stops[i]
-			if stop.Parent != nil && stop.Parent.Type == StopType_Station && stop.WheelchairBoarding == WheelchairBoarding_NotSpecified {
-				stop.WheelchairBoarding = stop.Parent.WheelchairBoarding
-			}
-		}
-	}
-
 	return result, nil
 }
 
@@ -443,7 +432,7 @@ func parseRouteSortOrder(raw string) *int32 {
 	return &i32
 }
 
-func parseStops(csv *csv.File) []Stop {
+func parseStops(csv *csv.File, inheritWheelchairBoarding bool) []Stop {
 	idColumn := csv.RequiredColumn("stop_id")
 	codeColumn := csv.OptionalColumn("stop_code")
 	nameColumn := csv.OptionalColumn("stop_name")
@@ -501,6 +490,17 @@ func parseStops(csv *csv.File) []Stop {
 		}
 		stops[stopIdToIndex[stopId]].Parent = &stops[parentStopIndex]
 	}
+
+	// Inherit wheelchair boarding from parent stops if specified.
+	if inheritWheelchairBoarding {
+		for i := range stops {
+			stop := &stops[i]
+			if stop.Parent != nil && stop.Parent.Type == StopType_Station && stop.WheelchairBoarding == WheelchairBoarding_NotSpecified {
+				stop.WheelchairBoarding = stop.Parent.WheelchairBoarding
+			}
+		}
+	}
+
 	return stops
 }
 
