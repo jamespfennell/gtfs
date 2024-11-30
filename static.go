@@ -177,9 +177,10 @@ func ParseStatic(content []byte, opts ParseStaticOptions) (*Static, error) {
 	tripIdToScheduledTrip := map[string]*ScheduledTrip{}
 	timezone := time.UTC
 	for _, table := range []struct {
-		File     constants.StaticFile
-		Action   func(file *csv.File) []warnings.StaticWarning
-		Optional bool
+		File        constants.StaticFile
+		Action      func(file *csv.File) []warnings.StaticWarning
+		PostProcess func()
+		Optional    bool
 	}{
 		{
 			File: constants.AgencyFile,
@@ -212,9 +213,7 @@ func ParseStatic(content []byte, opts ParseStaticOptions) (*Static, error) {
 		{
 			File: "transfers.txt",
 			Action: func(file *csv.File) (w []warnings.StaticWarning) {
-				if file != nil {
-					result.Transfers = parseTransfers(file, result.Stops)
-				}
+				result.Transfers = parseTransfers(file, result.Stops)
 				return
 			},
 			Optional: true,
@@ -222,9 +221,7 @@ func ParseStatic(content []byte, opts ParseStaticOptions) (*Static, error) {
 		{
 			File: "calendar.txt",
 			Action: func(file *csv.File) (w []warnings.StaticWarning) {
-				if file != nil {
-					parseCalendar(file, serviceIdToService, timezone)
-				}
+				parseCalendar(file, serviceIdToService, timezone)
 				return
 			},
 			Optional: true,
@@ -232,13 +229,13 @@ func ParseStatic(content []byte, opts ParseStaticOptions) (*Static, error) {
 		{
 			File: "calendar_dates.txt",
 			Action: func(file *csv.File) (w []warnings.StaticWarning) {
-				if file != nil {
-					parseCalendarDates(file, serviceIdToService, timezone)
-				}
+				parseCalendarDates(file, serviceIdToService, timezone)
+				return
+			},
+			PostProcess: func() {
 				for _, service := range serviceIdToService {
 					result.Services = append(result.Services, service)
 				}
-				return
 			},
 			Optional: true,
 		},
@@ -279,11 +276,13 @@ func ParseStatic(content []byte, opts ParseStaticOptions) (*Static, error) {
 			},
 		},
 	} {
+		if table.PostProcess == nil {
+			table.PostProcess = func() {}
+		}
 		zipFile := fileNameToFile[table.File]
 		if zipFile == nil {
 			if table.Optional {
-				// TODO: this is a bit hacky. Maybe have a table.PostAction() that is invoked instead?
-				table.Action(nil)
+				table.PostProcess()
 				continue
 			}
 			return nil, fmt.Errorf("no %q file in GTFS static feed", table.File)
@@ -293,6 +292,7 @@ func ParseStatic(content []byte, opts ParseStaticOptions) (*Static, error) {
 			return nil, fmt.Errorf("failed to read %q: %w", table.File, err)
 		}
 		w := table.Action(file)
+		table.PostProcess()
 		result.Warnings = append(result.Warnings, w...)
 		if err := file.Close(); err != nil {
 			return nil, fmt.Errorf("failed to read %q: %w", table.File, err)
@@ -863,10 +863,6 @@ type ShapeRow struct {
 }
 
 func parseShapes(csv *csv.File) []Shape {
-	if csv == nil {
-		return nil
-	}
-
 	shapeIDColumn := csv.RequiredColumn("shape_id")
 	shapePtLatColumn := csv.RequiredColumn("shape_pt_lat")
 	shapePtLonColumn := csv.RequiredColumn("shape_pt_lon")
@@ -930,10 +926,6 @@ func parseShapes(csv *csv.File) []Shape {
 }
 
 func parseFrequencies(csv *csv.File, tripIDToScheduledTrip map[string]*ScheduledTrip) {
-	if csv == nil {
-		return
-	}
-
 	tripIDColumn := csv.RequiredColumn("trip_id")
 	startTimeColumn := csv.RequiredColumn("start_time")
 	endTimeColumn := csv.RequiredColumn("end_time")
