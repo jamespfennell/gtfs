@@ -168,18 +168,19 @@ func ParseStatic(content []byte, opts ParseStaticOptions) (*Static, error) {
 		return nil, err
 	}
 	result := &Static{}
-	fileNameToFile := map[string]*zip.File{}
+	fileNameToFile := map[constants.StaticFile]*zip.File{}
 	for _, file := range reader.File {
-		fileNameToFile[file.Name] = file
+		fileNameToFile[constants.StaticFile(file.Name)] = file
 	}
 	serviceIdToService := map[string]Service{}
 	shapeIdToShape := map[string]*Shape{}
 	tripIdToScheduledTrip := map[string]*ScheduledTrip{}
 	timezone := time.UTC
 	for _, table := range []struct {
-		File     constants.StaticFile
-		Action   func(file *csv.File) []warnings.StaticWarning
-		Optional bool
+		File        constants.StaticFile
+		Action      func(file *csv.File) []warnings.StaticWarning
+		PostProcess func()
+		Optional    bool
 	}{
 		{
 			File: constants.AgencyFile,
@@ -212,9 +213,7 @@ func ParseStatic(content []byte, opts ParseStaticOptions) (*Static, error) {
 		{
 			File: "transfers.txt",
 			Action: func(file *csv.File) (w []warnings.StaticWarning) {
-				if file != nil {
-					result.Transfers = parseTransfers(file, result.Stops)
-				}
+				result.Transfers = parseTransfers(file, result.Stops)
 				return
 			},
 			Optional: true,
@@ -222,9 +221,7 @@ func ParseStatic(content []byte, opts ParseStaticOptions) (*Static, error) {
 		{
 			File: "calendar.txt",
 			Action: func(file *csv.File) (w []warnings.StaticWarning) {
-				if file != nil {
-					parseCalendar(file, serviceIdToService, timezone)
-				}
+				parseCalendar(file, serviceIdToService, timezone)
 				return
 			},
 			Optional: true,
@@ -232,13 +229,13 @@ func ParseStatic(content []byte, opts ParseStaticOptions) (*Static, error) {
 		{
 			File: "calendar_dates.txt",
 			Action: func(file *csv.File) (w []warnings.StaticWarning) {
-				if file != nil {
-					parseCalendarDates(file, serviceIdToService, timezone)
-				}
+				parseCalendarDates(file, serviceIdToService, timezone)
+				return
+			},
+			PostProcess: func() {
 				for _, service := range serviceIdToService {
 					result.Services = append(result.Services, service)
 				}
-				return
 			},
 			Optional: true,
 		},
@@ -279,20 +276,23 @@ func ParseStatic(content []byte, opts ParseStaticOptions) (*Static, error) {
 			},
 		},
 	} {
-		zipFile := fileNameToFile[string(table.File)]
+		if table.PostProcess == nil {
+			table.PostProcess = func() {}
+		}
+		zipFile := fileNameToFile[table.File]
 		if zipFile == nil {
 			if table.Optional {
-				// TODO: this is a bit hacky. Maybe have a table.PostAction() that is invoked instead?
-				table.Action(nil)
+				table.PostProcess()
 				continue
 			}
 			return nil, fmt.Errorf("no %q file in GTFS static feed", table.File)
 		}
-		file, err := readCsvFile(zipFile)
+		file, err := openCsvFile(table.File, zipFile)
 		if err != nil {
 			return nil, fmt.Errorf("failed to read %q: %w", table.File, err)
 		}
 		w := table.Action(file)
+		table.PostProcess()
 		result.Warnings = append(result.Warnings, w...)
 		if err := file.Close(); err != nil {
 			return nil, fmt.Errorf("failed to read %q: %w", table.File, err)
@@ -312,12 +312,12 @@ func ParseStatic(content []byte, opts ParseStaticOptions) (*Static, error) {
 	return result, nil
 }
 
-func readCsvFile(zipFile *zip.File) (*csv.File, error) {
+func openCsvFile(file constants.StaticFile, zipFile *zip.File) (*csv.File, error) {
 	content, err := zipFile.Open()
 	if err != nil {
 		return nil, err
 	}
-	f, err := csv.New(content)
+	f, err := csv.New(file, content)
 	if err != nil {
 		return nil, err
 	}
@@ -335,7 +335,7 @@ func parseAgencies(csv *csv.File) ([]Agency, []warnings.StaticWarning) {
 	fareUrlColumn := csv.OptionalColumn("agency_fare_url")
 	emailColumn := csv.OptionalColumn("agency_email")
 
-	if warnings := checkForMissingColumns(csv, constants.AgencyFile); warnings != nil {
+	if warnings := checkForMissingColumns(csv); len(warnings) > 0 {
 		return nil, warnings
 	}
 
@@ -354,7 +354,7 @@ func parseAgencies(csv *csv.File) ([]Agency, []warnings.StaticWarning) {
 			Email:    emailColumn.Read(),
 		}
 		if missingKeys := csv.MissingRowKeys(); len(missingKeys) > 0 {
-			w = append(w, warnings.NewStaticWarning(constants.AgencyFile, csv, warnings.AgencyMissingValues{
+			w = append(w, warnings.NewStaticWarning(csv, warnings.AgencyMissingValues{
 				AgencyID: agency.Id,
 				Columns:  missingKeys,
 			}))
@@ -863,10 +863,6 @@ type ShapeRow struct {
 }
 
 func parseShapes(csv *csv.File) []Shape {
-	if csv == nil {
-		return nil
-	}
-
 	shapeIDColumn := csv.RequiredColumn("shape_id")
 	shapePtLatColumn := csv.RequiredColumn("shape_pt_lat")
 	shapePtLonColumn := csv.RequiredColumn("shape_pt_lon")
@@ -930,10 +926,6 @@ func parseShapes(csv *csv.File) []Shape {
 }
 
 func parseFrequencies(csv *csv.File, tripIDToScheduledTrip map[string]*ScheduledTrip) {
-	if csv == nil {
-		return
-	}
-
 	tripIDColumn := csv.RequiredColumn("trip_id")
 	startTimeColumn := csv.RequiredColumn("start_time")
 	endTimeColumn := csv.RequiredColumn("end_time")
@@ -987,12 +979,12 @@ func parseFrequencies(csv *csv.File, tripIDToScheduledTrip map[string]*Scheduled
 	}
 }
 
-func checkForMissingColumns(csv *csv.File, file constants.StaticFile) []warnings.StaticWarning {
+func checkForMissingColumns(csv *csv.File) []warnings.StaticWarning {
 	missing := csv.MissingRequiredColumns()
 	if len(missing) == 0 {
 		return nil
 	}
 	return []warnings.StaticWarning{
-		warnings.NewStaticWarning(file, csv, warnings.MissingColumns{Columns: missing}),
+		warnings.NewStaticWarning(csv, warnings.MissingColumns{Columns: missing}),
 	}
 }

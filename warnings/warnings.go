@@ -25,10 +25,10 @@ type StaticWarning struct {
 	HeaderContent []string
 }
 
-func NewStaticWarning(file constants.StaticFile, csvFile *csv.File, kind StaticWarningKind) StaticWarning {
+func NewStaticWarning(csvFile *csv.File, kind StaticWarningKind) StaticWarning {
 	return StaticWarning{
 		Kind:          kind,
-		File:          file,
+		File:          csvFile.Name(),
 		RowNumber:     csvFile.RowNumber(),
 		RowContent:    csvFile.RowContent(),
 		HeaderContent: csvFile.HeaderContent(),

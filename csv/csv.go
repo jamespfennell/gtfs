@@ -8,12 +8,14 @@ import (
 	"fmt"
 	"io"
 
+	"github.com/jamespfennell/gtfs/constants"
 	"golang.org/x/text/encoding"
 	"golang.org/x/text/encoding/unicode"
 	"golang.org/x/text/transform"
 )
 
 type File struct {
+	name                   constants.StaticFile
 	csvReader              *csv.Reader
 	headerMap              map[string]int
 	headerContent          []string
@@ -29,7 +31,7 @@ type row struct {
 	missingKeys []string
 }
 
-func New(reader io.ReadCloser) (*File, error) {
+func New(name constants.StaticFile, reader io.ReadCloser) (*File, error) {
 	csvReader := BOMAwareCSVReader(reader)
 	firstRow, err := csvReader.Read()
 	// We don't reuse the first/header record as we keep this around
@@ -47,11 +49,16 @@ func New(reader io.ReadCloser) (*File, error) {
 		m[colHeader] = i
 	}
 	return &File{
+		name:          name,
 		headerMap:     m,
 		headerContent: firstRow,
 		csvReader:     csvReader,
 		closer:        reader.Close,
 	}, nil
+}
+
+func (f *File) Name() constants.StaticFile {
+	return f.name
 }
 
 func (f *File) HeaderContent() []string {
