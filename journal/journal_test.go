@@ -187,6 +187,6 @@ func mtp(r int64) *time.Time {
 	return &t
 }
 
-func ptr(t string) *string {
+func ptr[T any](t T) *T {
 	return &t
 }

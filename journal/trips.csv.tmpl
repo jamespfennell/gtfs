@@ -1,0 +1,4 @@
+trip_uid,trip_id,route_id,direction_id,start_time,vehicle_id,last_observed,marked_past,num_updates,num_schedule_changes,num_schedule_rewrites
+{{ range . -}}
+{{ .TripUID }},{{ .TripID }},{{ .RouteID }},{{ FormatDirectionID .DirectionID }},{{ .StartTime.Unix }},{{ .VehicleID }},{{ .LastObserved.Unix }},{{ NullableUnix .MarkedPast }},{{ .NumUpdates }},{{ .NumScheduleChanges }},{{ .NumScheduleRewrites }}
+{{ end -}}

@@ -1,0 +1,6 @@
+trip_uid,stop_id,track,arrival_time,departure_time,last_observed,marked_past
+{{ range $trip := . -}}
+{{- range .StopTimes -}}
+{{- $trip.TripUID }},{{ .StopID }},{{ NullableString .Track }},{{ NullableUnix .ArrivalTime }},{{ NullableUnix .DepartureTime }},{{ .LastObserved.Unix }},{{ NullableUnix .MarkedPast }}
+{{ end -}}
+{{ end -}}
