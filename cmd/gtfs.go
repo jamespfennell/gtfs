@@ -10,6 +10,7 @@ import (
 	"github.com/jamespfennell/gtfs"
 	"github.com/jamespfennell/gtfs/extensions/nyctalerts"
 	"github.com/jamespfennell/gtfs/extensions/nycttrips"
+	"github.com/jamespfennell/gtfs/journal"
 	"github.com/urfave/cli/v2"
 )
 
@@ -17,6 +18,17 @@ func main() {
 	app := &cli.App{
 		Name:  "GTFS parser",
 		Usage: "parse GTFS static and realtime feeds",
+		Flags: []cli.Flag{
+			&cli.BoolFlag{
+				Name:    "verbose",
+				Aliases: []string{"v"},
+				Usage:   "print additional data about each trip and vehicle",
+			},
+			&cli.StringFlag{
+				Name:  "extension",
+				Usage: "GTFS realtime extension to use: nycttrips, nyctalerts",
+			},
+		},
 		Commands: []*cli.Command{
 			{
 				Name:  "static",
@@ -36,19 +48,8 @@ func main() {
 				},
 			},
 			{
-				Name:  "realtime",
-				Usage: "parse a GTFS realtime message",
-				Flags: []cli.Flag{
-					&cli.BoolFlag{
-						Name:    "verbose",
-						Aliases: []string{"v"},
-						Usage:   "print additional data about each trip and vehicle",
-					},
-					&cli.StringFlag{
-						Name:  "extension",
-						Usage: "GTFS realtime extension to use: nycttrips, nyctalerts",
-					},
-				},
+				Name:      "realtime",
+				Usage:     "parse a GTFS realtime message",
 				ArgsUsage: "path",
 				Action: func(ctx *cli.Context) error {
 					args := ctx.Args()
@@ -60,27 +61,10 @@ func main() {
 					if err != nil {
 						return fmt.Errorf("failed to read file %s: %w", path, err)
 					}
-
 					opts := gtfs.ParseRealtimeOptions{}
-					switch ctx.String("extension") {
-					case "nycttrips":
-						opts.Extension = nycttrips.Extension(nycttrips.ExtensionOpts{
-							FilterStaleUnassignedTrips: true,
-						})
-						americaNewYorkTimezone, err := time.LoadLocation("America/New_York")
-						if err == nil {
-							opts.Timezone = americaNewYorkTimezone
-						}
-					case "nyctalerts":
-						opts.Extension = nyctalerts.Extension(nyctalerts.ExtensionOpts{
-							ElevatorAlertsDeduplicationPolicy:   nyctalerts.DeduplicateInComplex,
-							ElevatorAlertsInformUsingStationIDs: true,
-							SkipTimetabledNoServiceAlerts:       true,
-						})
-						americaNewYorkTimezone, err := time.LoadLocation("America/New_York")
-						if err == nil {
-							opts.Timezone = americaNewYorkTimezone
-						}
+					rawExtension := ctx.String("extension")
+					if err := readGtfsRealtimeExtension(rawExtension, &opts); err != nil {
+						return err
 					}
 					realtime, err := gtfs.ParseRealtime(b, &opts)
 					if err != nil {
@@ -107,13 +91,9 @@ func main() {
 				Usage: "build a journal from a series of GTFS realtime messages",
 				Flags: []cli.Flag{
 					&cli.BoolFlag{
-						Name:    "verbose",
-						Aliases: []string{"v"},
-						Usage:   "print additional data about each trip and vehicle",
-					},
-					&cli.StringFlag{
-						Name:  "extension",
-						Usage: "GTFS realtime extension to use: nycttrips, nyctalerts",
+						Name:    "output",
+						Aliases: []string{"o"},
+						Usage:   "directory to output the CSV files",
 					},
 				},
 				ArgsUsage: "path",
@@ -123,43 +103,25 @@ func main() {
 						return fmt.Errorf("a path to the GTFS realtime message was not provided")
 					}
 					path := ctx.Args().First()
-					/*
-											package main
+					opts := gtfs.ParseRealtimeOptions{}
+					rawExtension := ctx.String("extension")
+					if err := readGtfsRealtimeExtension(rawExtension, &opts); err != nil {
+						return err
+					}
 
-						import (
-							"flag"
-							"fmt"
-							"os"
-							"time"
-
-							"github.com/jamespfennell/gtfs/journal"
-							"github.com/jamespfennell/subwaydata.nyc/etl/export"
-						)
-
-						var printStopTimes = flag.Bool("s", false, "Print stop times")
-
-						func main() {
-							flag.Parse()
-							args := flag.Args()
-							if len(args) != 1 {
-								fmt.Println("Expected directory to be passed")
-								os.Exit(1)
-							}
-							dir := args[0]
-							source, err := journal.NewDirectoryGtfsrtSource(dir)
-							if err != nil {
-								fmt.Printf("Failed to open %s: %s", dir, err)
-							}
-							j := journal.BuildJournal(source, time.Unix(0, 0), time.Now())
-							tripsD, stopTimesD, err := export.AsCsv(j.Trips)
-							if err != nil {
-								fmt.Printf("Failed to export trips: %s", err)
-							}
-							fmt.Println(string(tripsD))
-							if *printStopTimes {
-								fmt.Println(string(stopTimesD))
-							}
-						}*/
+					source, err := journal.NewDirectoryGtfsrtSource(path)
+					if err != nil {
+						fmt.Printf("Failed to open %s: %s", path, err)
+					}
+					j := journal.BuildJournal(source, time.Unix(0, 0), time.Now())
+					export, err := j.ExportToCsv()
+					if err != nil {
+						fmt.Printf("Failed to export trips: %s", err)
+					}
+					fmt.Println(string(export.TripsCsv))
+					//if *printStopTimes {
+					//	fmt.Println(string(stopTimesD))
+					//}
 					return nil
 				},
 			},
@@ -169,6 +131,33 @@ func main() {
 		fmt.Println("Error:", err)
 		os.Exit(1)
 	}
+}
+
+func readGtfsRealtimeExtension(s string, opts *gtfs.ParseRealtimeOptions) error {
+	switch s {
+	case "":
+	case "nycttrips":
+		opts.Extension = nycttrips.Extension(nycttrips.ExtensionOpts{
+			FilterStaleUnassignedTrips: true,
+		})
+		americaNewYorkTimezone, err := time.LoadLocation("America/New_York")
+		if err == nil {
+			opts.Timezone = americaNewYorkTimezone
+		}
+	case "nyctalerts":
+		opts.Extension = nyctalerts.Extension(nyctalerts.ExtensionOpts{
+			ElevatorAlertsDeduplicationPolicy:   nyctalerts.DeduplicateInComplex,
+			ElevatorAlertsInformUsingStationIDs: true,
+			SkipTimetabledNoServiceAlerts:       true,
+		})
+		americaNewYorkTimezone, err := time.LoadLocation("America/New_York")
+		if err == nil {
+			opts.Timezone = americaNewYorkTimezone
+		}
+	default:
+		return fmt.Errorf("unknown extension %q; supported extensions are nycttrips and nyctalerts", s)
+	}
+	return nil
 }
 
 func formatTrip(trip gtfs.Trip, indent int, printStopTimes bool) string {
