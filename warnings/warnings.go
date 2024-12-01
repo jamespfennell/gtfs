@@ -40,7 +40,9 @@ func NewStaticWarning(csvFile *csv.File, kind StaticWarningKind) StaticWarning {
 // StaticWarningKind satisfies the error interface.
 type StaticWarningKind interface {
 	// Text of the warning message.
-	Error() string
+	Error() string // TODO: Message()
+
+	// TODO: Fatal() ? And convert all parsing errors into warnings
 }
 
 type MissingColumns struct {
