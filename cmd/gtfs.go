@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -90,7 +91,7 @@ func main() {
 				Name:  "journal",
 				Usage: "build a journal from a series of GTFS realtime messages",
 				Flags: []cli.Flag{
-					&cli.BoolFlag{
+					&cli.StringFlag{
 						Name:    "output",
 						Aliases: []string{"o"},
 						Usage:   "directory to output the CSV files",
@@ -100,7 +101,7 @@ func main() {
 				Action: func(ctx *cli.Context) error {
 					args := ctx.Args()
 					if args.Len() == 0 {
-						return fmt.Errorf("a path to the GTFS realtime message was not provided")
+						return fmt.Errorf("a path to the GTFS realtime messages was not provided")
 					}
 					path := ctx.Args().First()
 					opts := gtfs.ParseRealtimeOptions{}
@@ -111,17 +112,37 @@ func main() {
 
 					source, err := journal.NewDirectoryGtfsrtSource(path)
 					if err != nil {
-						fmt.Printf("Failed to open %s: %s", path, err)
+						return fmt.Errorf("failed to open %s: %w", path, err)
 					}
+					fmt.Println("Building journal...")
 					j := journal.BuildJournal(source, time.Unix(0, 0), time.Now())
+					fmt.Println("Exporting journal to CSV format...")
 					export, err := j.ExportToCsv()
 					if err != nil {
-						fmt.Printf("Failed to export trips: %s", err)
+						return fmt.Errorf("failed to export journal: %w", err)
 					}
-					fmt.Println(string(export.TripsCsv))
-					//if *printStopTimes {
-					//	fmt.Println(string(stopTimesD))
-					//}
+
+					outputDir := ctx.String("output")
+					for _, f := range []struct {
+						file string
+						data []byte
+					}{
+						{
+							file: "trips.csv",
+							data: export.TripsCsv,
+						},
+						{
+							file: "stop_times.csv",
+							data: export.StopTimesCsv,
+						},
+					} {
+						fullPath := filepath.Join(outputDir, f.file)
+						fmt.Printf("Writing %s to %s\n", f.file, fullPath)
+						if err := os.WriteFile(fullPath, f.data, 0666); err != nil {
+							return fmt.Errorf("failed to write %s: %w", f.file, err)
+						}
+					}
+					fmt.Println("Done")
 					return nil
 				},
 			},
