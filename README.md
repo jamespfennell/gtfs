@@ -25,6 +25,26 @@ this package is under active development and backwards incompatible changes are 
 We're eventually planning to release a `v1.0.0` version, and after that all changes
 will be backwards compatible and consistent with semantic versioning.
 
+## Examples
+
+Parse the GTFS static feed for the New York City Subway:
+
+```go
+resp, _ := http.Get("http://web.mta.info/developers/data/nyct/subway/google_transit.zip")
+b, _ := io.ReadAll(resp.Body)
+staticData, _ := gtfs.ParseStatic(b, gtfs.ParseStaticOptions{})
+fmt.Printf("The New York City subway has %d routes and %d stations\n", len(staticData.Routes), len(staticData.Stops))
+```
+
+Parse the GTFS realtime feed for the San Francisco Bay Area BART:
+
+```go
+resp, _ := http.Get("http://api.bart.gov/gtfsrt/tripupdate.aspx")
+b, _ := io.ReadAll(resp.Body)
+realtimeData, _ := gtfs.ParseRealtime(b, &gtfs.ParseRealtimeOptions{})
+fmt.Printf("The SF BART currently has %d trains running or scheduled\n", len(realtimeData.Trips))
+```
+
 ## Supported GTFS Schedule files
 
 Below is a list of the GTFS schedule files and whether they are currently supported. Progress for full support is being tracked in issue [#4](https://github.com/jamespfennell/gtfs/issues/4).
@@ -62,26 +82,6 @@ Below is a list of the GTFS schedule files and whether they are currently suppor
 | [translations.txt](https://gtfs.org/documentation/schedule/reference/#translationstxt)                 | ❌        | Optional                |                                                             |
 | [feed_info.txt](https://gtfs.org/documentation/schedule/reference/#feed_infotxt)                       | ❌        | Conditionally Required  |                                                             |
 | [attributions.txt](https://gtfs.org/documentation/schedule/reference/#attributionstxt)                 | ❌        | Optional                |                                                             |
-
-## Examples
-
-Parse the GTFS static feed for the New York City Subway:
-
-```go
-resp, _ := http.Get("http://web.mta.info/developers/data/nyct/subway/google_transit.zip")
-b, _ := io.ReadAll(resp.Body)
-staticData, _ := gtfs.ParseStatic(b, gtfs.ParseStaticOptions{})
-fmt.Printf("The New York City subway has %d routes and %d stations\n", len(staticData.Routes), len(staticData.Stops))
-```
-
-Parse the GTFS realtime feed for the San Francisco Bay Area BART:
-
-```go
-resp, _ := http.Get("http://api.bart.gov/gtfsrt/tripupdate.aspx")
-b, _ := io.ReadAll(resp.Body)
-realtimeData, _ := gtfs.ParseRealtime(b, &gtfs.ParseRealtimeOptions{})
-fmt.Printf("The SF BART currently has %d trains running or scheduled\n", len(realtimeData.Trips))
-```
 
 ## Performance
 
