@@ -27,6 +27,10 @@ type Static struct {
 	Trips     []ScheduledTrip
 	Shapes    []Shape
 
+	// Fare V1
+	Fares     []Fare
+	FareRules []FareRule
+
 	// Warnings raised during GTFS static parsing.
 	Warnings []warnings.StaticWarning
 }
@@ -155,6 +159,24 @@ type Frequency struct {
 	ExactTimes ExactTimes
 }
 
+type Fare struct {
+	Id               string
+	Price            float64
+	CurrencyType     string
+	PaymentMethod    PaymentMethod
+	Transfers        FareTransferPolicy
+	Agency           *Agency
+	TransferDuration *int32
+}
+
+type FareRule struct {
+	Fare          *Fare
+	Route         *Route
+	OriginId      *string
+	DestinationId *string
+	ContainsId    *string
+}
+
 type ParseStaticOptions struct {
 	// If true, wheelchair boarding information is inherited from parent station
 	// when unspecified for a child stop/platform, entrance, or exit.
@@ -275,6 +297,22 @@ func ParseStatic(content []byte, opts ParseStaticOptions) (*Static, error) {
 				return
 			},
 		},
+		{
+			File: constants.FareAttributesFile,
+			Action: func(file *csv.File) (w []warnings.StaticWarning) {
+				result.Fares, w = parseFareAttributes(file, result.Agencies)
+				return
+			},
+			Optional: true,
+		},
+		{
+			File: constants.FareRulesFile,
+			Action: func(file *csv.File) (w []warnings.StaticWarning) {
+				result.FareRules, w = parseFareRules(file, result.Fares, result.Routes, result.Stops)
+				return
+			},
+			Optional: true,
+		},
 	} {
 		if table.PostProcess == nil {
 			table.PostProcess = func() {}
@@ -379,12 +417,7 @@ func parseRoutes(csv *csv.File, agencies []Agency) []Route {
 		agencyID := agencyIDColumn.Read()
 		var agency *Agency
 		if agencyID != "" {
-			for i := range agencies {
-				if agencies[i].Id == agencyID {
-					agency = &agencies[i]
-					break
-				}
-			}
+			agency = findAgencyWithId(agencies, agencyID)
 			if agency == nil {
 				log.Printf("skipping route %s: no match for agency ID %s", routeID, agencyID)
 				continue
@@ -504,17 +537,6 @@ func parseStops(csv *csv.File, inheritWheelchairBoarding bool) []Stop {
 	return stops
 }
 
-func parseFloat64(s string) *float64 {
-	if s == "" {
-		return nil
-	}
-	f, err := strconv.ParseFloat(strings.TrimSpace(s), 64)
-	if err != nil {
-		return nil
-	}
-	return &f
-}
-
 func parseTransfers(csv *csv.File, stops []Stop) []Transfer {
 	fromStopIDColumn := csv.RequiredColumn("from_stop_id")
 	toStopIDColumn := csv.RequiredColumn("to_stop_id")
@@ -560,18 +582,6 @@ func parseTransfers(csv *csv.File, stops []Stop) []Transfer {
 		})
 	}
 	return transfers
-}
-
-func parseInt32(s string) *int32 {
-	if s == "" {
-		return nil
-	}
-	i, err := strconv.ParseInt(s, 10, 32)
-	if err != nil {
-		return nil
-	}
-	i32 := int32(i)
-	return &i32
 }
 
 func parseCalendar(f *csv.File, m map[string]Service, timezone *time.Location) {
@@ -979,12 +989,326 @@ func parseFrequencies(csv *csv.File, tripIDToScheduledTrip map[string]*Scheduled
 	}
 }
 
-func checkForMissingColumns(csv *csv.File) []warnings.StaticWarning {
-	missing := csv.MissingRequiredColumns()
-	if len(missing) == 0 {
+func parseFareAttributes(csv *csv.File, agencies []Agency) ([]Fare, []warnings.StaticWarning) {
+	fareIDColumn := csv.RequiredColumn("fare_id")
+	priceColumn := csv.RequiredColumn("price")
+	currencyTypeColumn := csv.RequiredColumn("currency_type")
+	paymentMethodColumn := csv.RequiredColumn("payment_method")
+	transfersColumn := csv.RequiredColumnAllowEmpty("transfers")
+	agencyIDColumn := csv.ConditionallyRequiredColumn("agency_id", "required with multiple agencies", len(agencies) > 1)
+	transferDurationColumn := csv.OptionalColumn("transfer_duration")
+
+	if warnings := checkForMissingColumns(csv); len(warnings) > 0 {
+		return nil, warnings
+	}
+
+	var fareAttributes []Fare
+	var allWarnings []warnings.StaticWarning
+	for csv.NextRow() {
+		var warningsForRow []warnings.StaticWarning
+		fareID := fareIDColumn.Read()
+		price := parseNonNegativeFloat64(priceColumn.Read())
+		currencyType := currencyTypeColumn.Read()
+		paymentMethod, paymentMethodErr := parsePaymentMethod(paymentMethodColumn.Read())
+		transfers, transfersErr := parseFareTransferPolicy(transfersColumn.Read())
+		agencyID := agencyIDColumn.Read()
+		transferDuration := parseNonNegativeInt32(transferDurationColumn.Read())
+
+		if missingKeyWarnings := checkForMissingKeysinRow(constants.Fare, fareID, csv); len(missingKeyWarnings) > 0 {
+			warningsForRow = append(warningsForRow, missingKeyWarnings...)
+		}
+
+		if price == nil {
+			warningsForRow = append(warningsForRow, warnings.NewStaticWarning(csv, warnings.RowInvalidValue{
+				Entity: constants.Fare,
+				Id:     fareID,
+				Column: priceColumn.Name(),
+				Value:  priceColumn.Read(),
+			}))
+		}
+
+		if paymentMethodErr != nil {
+			warningsForRow = append(warningsForRow, warnings.NewStaticWarning(csv, warnings.RowInvalidValue{
+				Entity: constants.Fare,
+				Id:     fareID,
+				Column: paymentMethodColumn.Name(),
+				Value:  paymentMethodColumn.Read(),
+			}))
+		}
+
+		if transfersErr != nil {
+			warningsForRow = append(warningsForRow, warnings.NewStaticWarning(csv, warnings.RowInvalidValue{
+				Entity: constants.Fare,
+				Id:     fareID,
+				Column: transfersColumn.Name(),
+				Value:  transfersColumn.Read(),
+			}))
+		}
+
+		if transferDuration == nil && transferDurationColumn.Read() != "" {
+			warningsForRow = append(warningsForRow, warnings.NewStaticWarning(csv, warnings.RowInvalidValue{
+				Entity: constants.Fare,
+				Id:     fareID,
+				Column: transferDurationColumn.Name(),
+				Value:  transferDurationColumn.Read(),
+			}))
+		}
+
+		var agency *Agency = nil
+		if agencyID != "" {
+			agency = findAgencyWithId(agencies, agencyID)
+			if agency == nil {
+				warningsForRow = append(warningsForRow, warnings.NewStaticWarning(csv, warnings.RowInvalidForeignKey{
+					Entity:          constants.Fare,
+					ReferenceEntity: constants.Agency,
+					Id:              fareID,
+					Column:          agencyIDColumn.Name(),
+					Value:           agencyID,
+				}))
+			}
+		}
+
+		if len(warningsForRow) > 0 {
+			allWarnings = append(allWarnings, warningsForRow...)
+			continue
+		}
+
+		if agency == nil && len(agencies) == 1 {
+			agency = &agencies[0]
+		}
+
+		fareAttributes = append(fareAttributes, Fare{
+			Id:               fareID,
+			Price:            *price,
+			CurrencyType:     currencyType,
+			PaymentMethod:    paymentMethod,
+			Transfers:        transfers,
+			Agency:           agency,
+			TransferDuration: transferDuration,
+		})
+	}
+	return fareAttributes, allWarnings
+}
+
+func parseFareRules(csv *csv.File, fares []Fare, routes []Route, stops []Stop) ([]FareRule, []warnings.StaticWarning) {
+	fareIDColumn := csv.RequiredColumn("fare_id")
+	routeIDColumn := csv.OptionalColumn("route_id")
+	originIDColumn := csv.OptionalColumn("origin_id")
+	destinationIDColumn := csv.OptionalColumn("destination_id")
+	containsIDColumn := csv.OptionalColumn("contains_id")
+
+	if warnings := checkForMissingColumns(csv); len(warnings) > 0 {
+		return nil, warnings
+	}
+
+	var fareRules []FareRule
+	var allWarnings []warnings.StaticWarning
+	for csv.NextRow() {
+		var warningsForRow []warnings.StaticWarning
+		fareID := fareIDColumn.Read()
+		routeID := routeIDColumn.Read()
+		originID := originIDColumn.Read()
+		destinationID := destinationIDColumn.Read()
+		containsID := containsIDColumn.Read()
+
+		if missingKeyWarnings := checkForMissingKeysinRow(constants.FareRule, fareID, csv); len(missingKeyWarnings) > 0 {
+			warningsForRow = append(warningsForRow, missingKeyWarnings...)
+		}
+
+		fare := findFareWithId(fares, fareID)
+		if fare == nil {
+			warningsForRow = append(warningsForRow, warnings.NewStaticWarning(csv, warnings.RowInvalidForeignKey{
+				Entity:          constants.FareRule,
+				ReferenceEntity: constants.Fare,
+				Column:          fareIDColumn.Name(),
+				Value:           fareID,
+			}))
+		}
+
+		var route *Route = nil
+		if routeID != "" {
+			route = findRouteWithId(routes, routeID)
+			if route == nil {
+				warningsForRow = append(warningsForRow, warnings.NewStaticWarning(csv, warnings.RowInvalidForeignKey{
+					Entity:          constants.FareRule,
+					ReferenceEntity: constants.Route,
+					Column:          routeIDColumn.Name(),
+					Value:           routeID,
+				}))
+			}
+		}
+
+		var originId *string = nil
+		if originID != "" {
+			originId = stopZoneIdExists(stops, originID)
+			if originId == nil {
+				warningsForRow = append(warningsForRow, warnings.NewStaticWarning(csv, warnings.RowInvalidForeignId{
+					Entity:          constants.FareRule,
+					ReferenceEntity: constants.Stop,
+					ReferenceId:     constants.StopZoneId,
+					Column:          originIDColumn.Name(),
+					Value:           originID,
+				}))
+			}
+		}
+
+		var destinationId *string = nil
+		if destinationID != "" {
+			destinationId = stopZoneIdExists(stops, destinationID)
+			if destinationId == nil {
+				warningsForRow = append(warningsForRow, warnings.NewStaticWarning(csv, warnings.RowInvalidForeignId{
+					Entity:          constants.FareRule,
+					ReferenceEntity: constants.Stop,
+					ReferenceId:     constants.StopZoneId,
+					Column:          destinationIDColumn.Name(),
+					Value:           destinationID,
+				}))
+			}
+		}
+
+		var containsId *string = nil
+		if containsID != "" {
+			containsId = stopZoneIdExists(stops, containsID)
+			if containsId == nil {
+				warningsForRow = append(warningsForRow, warnings.NewStaticWarning(csv, warnings.RowInvalidForeignId{
+					Entity:          constants.FareRule,
+					ReferenceEntity: constants.Stop,
+					ReferenceId:     constants.StopZoneId,
+					Column:          containsIDColumn.Name(),
+					Value:           containsID,
+				}))
+			}
+		}
+
+		if len(warningsForRow) > 0 {
+			allWarnings = append(allWarnings, warningsForRow...)
+			continue
+		}
+
+		fareRules = append(fareRules, FareRule{
+			Fare:          fare,
+			Route:         route,
+			OriginId:      originId,
+			DestinationId: destinationId,
+			ContainsId:    containsId,
+		})
+	}
+	return fareRules, allWarnings
+}
+
+func parseInt32(s string) *int32 {
+	if s == "" {
 		return nil
 	}
-	return []warnings.StaticWarning{
-		warnings.NewStaticWarning(csv, warnings.MissingColumns{Columns: missing}),
+	i, err := strconv.ParseInt(s, 10, 32)
+	if err != nil {
+		return nil
 	}
+	i32 := int32(i)
+	return &i32
+}
+
+func parseNonNegativeInt32(s string) *int32 {
+	i := parseInt32(s)
+	if i != nil && *i < 0 {
+		return nil
+	}
+	return i
+}
+
+func parseFloat64(s string) *float64 {
+	if s == "" {
+		return nil
+	}
+	f, err := strconv.ParseFloat(strings.TrimSpace(s), 64)
+	if err != nil {
+		return nil
+	}
+	return &f
+}
+
+func parseNonNegativeFloat64(s string) *float64 {
+	f := parseFloat64(s)
+	if f != nil && *f < 0 {
+		return nil
+	}
+	return f
+}
+
+func findAgencyWithId(agencies []Agency, id string) *Agency {
+	for i := range agencies {
+		if agencies[i].Id == id {
+			return &agencies[i]
+		}
+	}
+	return nil
+}
+
+func findRouteWithId(routes []Route, id string) *Route {
+	for i := range routes {
+		if routes[i].Id == id {
+			return &routes[i]
+		}
+	}
+	return nil
+}
+
+func findFareWithId(fares []Fare, id string) *Fare {
+	for i := range fares {
+		if fares[i].Id == id {
+			return &fares[i]
+		}
+	}
+	return nil
+}
+
+func stopZoneIdExists(stops []Stop, zoneId string) *string {
+	for i := range stops {
+		if stops[i].ZoneId == zoneId {
+			return &stops[i].ZoneId
+		}
+	}
+	return nil
+}
+
+func checkForMissingColumns(csv *csv.File) []warnings.StaticWarning {
+	missingRequired := csv.MissingRequiredColumns()
+	missingConditionallyRequired := csv.MissingConditionallyRequiredColumns()
+
+	var allWarnings []warnings.StaticWarning = nil
+	if len(missingRequired) > 0 {
+		allWarnings = append(allWarnings, warnings.NewStaticWarning(csv, warnings.MissingColumns{Columns: missingRequired}))
+	}
+	for _, missingConditionalColumn := range missingConditionallyRequired {
+		allWarnings = append(allWarnings, warnings.NewStaticWarning(csv,
+			warnings.MissingConditionallyRequiredColumn{
+				Column:    missingConditionalColumn.Column,
+				Condition: missingConditionalColumn.Condition,
+			}))
+	}
+	return allWarnings
+}
+
+func checkForMissingKeysinRow(entity constants.ScheduleEnity, id string, csv *csv.File) []warnings.StaticWarning {
+	missingRequiredKeys := csv.MissingRowKeys()
+	missingConditionallyRequiredKeys := csv.MissingConditionallyRequiredColumns()
+
+	var allWarnings []warnings.StaticWarning = nil
+	for _, missingKey := range missingRequiredKeys {
+		allWarnings = append(allWarnings, warnings.NewStaticWarning(csv, warnings.RowMissingRequiredValue{
+			Entity: entity,
+			Id:     id,
+			Column: missingKey,
+		}))
+	}
+
+	for _, missingConditionalKey := range missingConditionallyRequiredKeys {
+		allWarnings = append(allWarnings, warnings.NewStaticWarning(csv, warnings.RowMissingConditionallyRequiredValue{
+			Entity:    entity,
+			Id:        id,
+			Column:    missingConditionalKey.Column,
+			Condition: missingConditionalKey.Condition,
+		}))
+	}
+	return allWarnings
 }

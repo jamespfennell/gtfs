@@ -1,6 +1,10 @@
 package gtfs
 
-import "strconv"
+import (
+	"fmt"
+	"strconv"
+	"strings"
+)
 
 // BikesAllowed describes whether bikes are allowed on a scheduled trip.
 //
@@ -361,5 +365,59 @@ func (w WheelchairBoarding) String() string {
 		return "NOT_POSSIBLE"
 	default:
 		return "UNKNOWN"
+	}
+}
+
+// PaymentMethod describes the payment method for a fare.
+type PaymentMethod int
+
+const (
+	PaymentMethod_Onboard        PaymentMethod = 0
+	PaymentMethod_BeforeBoarding PaymentMethod = 1
+)
+
+func parsePaymentMethod(s string) (PaymentMethod, error) {
+	switch s {
+	case "0":
+		return PaymentMethod_Onboard, nil
+	case "1":
+		return PaymentMethod_BeforeBoarding, nil
+	default:
+		return -1, fmt.Errorf("invalid payment method: %s", s)
+	}
+}
+
+func (p PaymentMethod) String() string {
+	switch p {
+	case PaymentMethod_BeforeBoarding:
+		return "BEFORE_BOARDING"
+	case PaymentMethod_Onboard:
+		return "ONBOARD"
+	default:
+		return "UNKNOWN"
+	}
+}
+
+type FareTransferPolicy int
+
+const (
+	FareTransferPolicy_NoTransfer   FareTransferPolicy = 0
+	FareTransferPolicy_OneTransfer  FareTransferPolicy = 1
+	FareTransferPolicy_TwoTransfers FareTransferPolicy = 2
+	FareTransferPolicy_Unlimited    FareTransferPolicy = 3
+)
+
+func parseFareTransferPolicy(s string) (FareTransferPolicy, error) {
+	switch strings.TrimSpace(s) {
+	case "0":
+		return FareTransferPolicy_NoTransfer, nil
+	case "1":
+		return FareTransferPolicy_OneTransfer, nil
+	case "2":
+		return FareTransferPolicy_TwoTransfers, nil
+	case "":
+		return FareTransferPolicy_Unlimited, nil
+	default:
+		return -1, fmt.Errorf("invalid fare transfer policy: %s", s)
 	}
 }
