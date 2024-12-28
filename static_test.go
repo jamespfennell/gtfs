@@ -43,6 +43,10 @@ func TestParse(t *testing.T) {
 	defaultStop := Stop{
 		Id: "stop_id",
 	}
+	defaultStopWithZone := Stop{
+		Id:     "stop_id",
+		ZoneId: "zone_id",
+	}
 	defaultService := Service{
 		Id:        "service_id",
 		StartDate: may4,
@@ -52,6 +56,14 @@ func TestParse(t *testing.T) {
 		ID:      "trip_id",
 		Route:   &defaultRoute,
 		Service: &defaultService,
+	}
+	defaultFare := Fare{
+		Id:            "fare_id",
+		Price:         2.90,
+		CurrencyType:  "USD",
+		PaymentMethod: PaymentMethod_BeforeBoarding,
+		Transfers:     FareTransferPolicy_Unlimited,
+		Agency:        &defaultAgency,
 	}
 	for _, tc := range []struct {
 		desc     string
@@ -1167,6 +1179,413 @@ func TestParse(t *testing.T) {
 				},
 			},
 		},
+		{
+			desc: "fare attributes",
+			content: newZipBuilderWithAgency().add(
+				"fare_attributes.txt",
+				"fare_id,price,currency_type,payment_method,transfers,transfer_duration,agency_id",
+				"fare_id,1,USD,0,0,0,a",
+			).build(),
+			expected: &Static{
+				Agencies: []Agency{defaultAgency},
+				Fares: []Fare{
+					{
+						Id:               "fare_id",
+						Price:            1,
+						CurrencyType:     "USD",
+						PaymentMethod:    PaymentMethod_Onboard,
+						Transfers:        FareTransferPolicy_NoTransfer,
+						TransferDuration: ptr(int32(0)),
+						Agency:           &defaultAgency,
+					},
+				},
+			},
+		},
+		{
+			desc: "fare attributes, no transfer duration",
+			content: newZipBuilderWithAgency().add(
+				"fare_attributes.txt",
+				"fare_id,price,currency_type,payment_method,transfers,agency_id",
+				"fare_id,1,USD,0,0,a",
+			).build(),
+			expected: &Static{
+				Agencies: []Agency{defaultAgency},
+				Fares: []Fare{
+					{
+						Id:            "fare_id",
+						Price:         1,
+						CurrencyType:  "USD",
+						PaymentMethod: PaymentMethod_Onboard,
+						Transfers:     FareTransferPolicy_NoTransfer,
+						Agency:        &defaultAgency,
+					},
+				},
+			},
+		},
+		{
+			desc: "fare attributes, multiple agencies",
+			content: newZipBuilderWithMultipleAgencies().add(
+				"fare_attributes.txt",
+				"fare_id,price,currency_type,payment_method,transfers,transfer_duration,agency_id",
+				"fare_id_1,1,USD,0,1,0,a",
+				"fare_id_2,2,USD,0,,0,e",
+			).build(),
+			expected: &Static{
+				Agencies: []Agency{defaultAgency, otherAgency},
+				Fares: []Fare{
+					{
+						Id:               "fare_id_1",
+						Price:            1,
+						CurrencyType:     "USD",
+						PaymentMethod:    PaymentMethod_Onboard,
+						Transfers:        FareTransferPolicy_OneTransfer,
+						TransferDuration: ptr(int32(0)),
+						Agency:           &defaultAgency,
+					},
+					{
+						Id:               "fare_id_2",
+						Price:            2,
+						CurrencyType:     "USD",
+						PaymentMethod:    PaymentMethod_Onboard,
+						Transfers:        FareTransferPolicy_Unlimited,
+						TransferDuration: ptr(int32(0)),
+						Agency:           &otherAgency,
+					},
+				},
+			},
+		},
+		{
+			desc: "fare attributes, no agency_id defaults to only agency",
+			content: newZipBuilderWithAgency().add(
+				"fare_attributes.txt",
+				"fare_id,price,currency_type,payment_method,transfers,transfer_duration",
+				"fare_id_1,1,USD,0,0,0",
+			).build(),
+			expected: &Static{
+				Agencies: []Agency{defaultAgency},
+				Fares: []Fare{
+					{
+						Id:               "fare_id_1",
+						Price:            1,
+						CurrencyType:     "USD",
+						PaymentMethod:    PaymentMethod_Onboard,
+						Transfers:        FareTransferPolicy_NoTransfer,
+						TransferDuration: ptr(int32(0)),
+						Agency:           &defaultAgency,
+					},
+				},
+			},
+		},
+		{
+			desc: "fare attributes, multiple agencies and no agency_id",
+			content: newZipBuilderWithMultipleAgencies().add(
+				"fare_attributes.txt",
+				"fare_id,price,currency_type,payment_method,transfers,transfer_duration",
+				"fare_id_1,1,USD,0,0,0",
+				"fare_id_2,2,USD,0,0,0",
+			).build(),
+			expected: &Static{
+				Agencies: []Agency{defaultAgency, otherAgency},
+				Warnings: []warnings.StaticWarning{
+					{
+						Kind: warnings.MissingConditionallyRequiredColumn{
+							Column:    "agency_id",
+							Condition: "required with multiple agencies",
+						},
+						File:          "fare_attributes.txt",
+						RowContent:    []string{"fare_id", "price", "currency_type", "payment_method", "transfers", "transfer_duration"},
+						HeaderContent: []string{"fare_id", "price", "currency_type", "payment_method", "transfers", "transfer_duration"},
+					},
+				},
+			},
+		},
+		{
+			desc: "fare attributes, negative price",
+			content: newZipBuilderWithAgency().add(
+				"fare_attributes.txt",
+				"fare_id,price,currency_type,payment_method,transfers,transfer_duration,agency_id",
+				"fare_id,-1,USD,0,0,0,a",
+			).build(),
+			expected: &Static{
+				Agencies: []Agency{defaultAgency},
+				Warnings: []warnings.StaticWarning{
+					{
+						Kind: warnings.RowInvalidValue{
+							Entity: constants.Fare,
+							Id:     "fare_id",
+							Column: "price",
+							Value:  "-1",
+						},
+						File:       constants.FareAttributesFile,
+						RowNumber:  1,
+						RowContent: []string{"fare_id", "-1", "USD", "0", "0", "0", "a"},
+						HeaderContent: []string{
+							"fare_id", "price", "currency_type", "payment_method", "transfers",
+							"transfer_duration", "agency_id",
+						},
+					},
+				},
+			},
+		},
+		{
+			desc: "fare attributes, invalid payment method",
+			content: newZipBuilderWithAgency().add(
+				"fare_attributes.txt",
+				"fare_id,price,currency_type,payment_method,transfers,transfer_duration,agency_id",
+				"fare_id,1,USD,5,0,0,a",
+			).build(),
+			expected: &Static{
+				Agencies: []Agency{defaultAgency},
+				Warnings: []warnings.StaticWarning{
+					{
+						Kind: warnings.RowInvalidValue{
+							Entity: constants.Fare,
+							Id:     "fare_id",
+							Column: "payment_method",
+							Value:  "5",
+						},
+						File:       constants.FareAttributesFile,
+						RowNumber:  1,
+						RowContent: []string{"fare_id", "1", "USD", "5", "0", "0", "a"},
+						HeaderContent: []string{
+							"fare_id", "price", "currency_type", "payment_method", "transfers",
+							"transfer_duration", "agency_id",
+						},
+					},
+				},
+			},
+		},
+		{
+			desc: "fare attributes, invalid transfers",
+			content: newZipBuilderWithAgency().add(
+				"fare_attributes.txt",
+				"fare_id,price,currency_type,payment_method,transfers,transfer_duration,agency_id",
+				"fare_id,1,USD,0,10,0,a",
+			).build(),
+			expected: &Static{
+				Agencies: []Agency{defaultAgency},
+				Warnings: []warnings.StaticWarning{
+					{
+						Kind: warnings.RowInvalidValue{
+							Entity: constants.Fare,
+							Id:     "fare_id",
+							Column: "transfers",
+							Value:  "10",
+						},
+						File:       constants.FareAttributesFile,
+						RowNumber:  1,
+						RowContent: []string{"fare_id", "1", "USD", "0", "10", "0", "a"},
+						HeaderContent: []string{
+							"fare_id", "price", "currency_type", "payment_method", "transfers",
+							"transfer_duration", "agency_id",
+						},
+					},
+				},
+			},
+		},
+		{
+			desc: "fare attributes, invalid transfer duration",
+			content: newZipBuilderWithAgency().add(
+				"fare_attributes.txt",
+				"fare_id,price,currency_type,payment_method,transfers,transfer_duration,agency_id",
+				"fare_id,1,USD,0,0,-10,a",
+			).build(),
+			expected: &Static{
+				Agencies: []Agency{defaultAgency},
+				Warnings: []warnings.StaticWarning{
+					{
+						Kind: warnings.RowInvalidValue{
+							Entity: constants.Fare,
+							Id:     "fare_id",
+							Column: "transfer_duration",
+							Value:  "-10",
+						},
+						File:       constants.FareAttributesFile,
+						RowNumber:  1,
+						RowContent: []string{"fare_id", "1", "USD", "0", "0", "-10", "a"},
+						HeaderContent: []string{
+							"fare_id", "price", "currency_type", "payment_method", "transfers",
+							"transfer_duration", "agency_id",
+						},
+					},
+				},
+			},
+		},
+		{
+			desc: "fare attributes, invalid agency reference",
+			content: newZipBuilderWithAgency().add(
+				"fare_attributes.txt",
+				"fare_id,price,currency_type,payment_method,transfers,transfer_duration,agency_id",
+				"fare_id,1,USD,0,0,0,b",
+			).build(),
+			expected: &Static{
+				Agencies: []Agency{defaultAgency},
+				Warnings: []warnings.StaticWarning{
+					{
+						Kind: warnings.RowInvalidForeignKey{
+							Entity:          constants.Fare,
+							ReferenceEntity: constants.Agency,
+							Id:              "fare_id",
+							Column:          "agency_id",
+							Value:           "b",
+						},
+						File:       constants.FareAttributesFile,
+						RowNumber:  1,
+						RowContent: []string{"fare_id", "1", "USD", "0", "0", "0", "b"},
+						HeaderContent: []string{
+							"fare_id", "price", "currency_type", "payment_method", "transfers",
+							"transfer_duration", "agency_id",
+						},
+					},
+				},
+			},
+		},
+		{
+			desc: "fare rules",
+			content: newZipBuilderWithFare().add(
+				"stops.txt",
+				"stop_id,zone_id",
+				"stop_id,zone_id",
+			).add(
+				"routes.txt",
+				"route_id,route_type",
+				"route_id,3",
+			).add(
+				"fare_rules.txt",
+				"fare_id,route_id,origin_id,destination_id,contains_id",
+				"fare_id,route_id,zone_id,zone_id,zone_id",
+			).build(),
+			expected: &Static{
+				Agencies: []Agency{defaultAgency},
+				Stops:    []Stop{defaultStopWithZone},
+				Routes:   []Route{defaultRoute},
+				Fares:    []Fare{defaultFare},
+				FareRules: []FareRule{
+					{
+						Fare:          &defaultFare,
+						Route:         &defaultRoute,
+						OriginId:      ptr("zone_id"),
+						DestinationId: ptr("zone_id"),
+						ContainsId:    ptr("zone_id"),
+					},
+				},
+			},
+		},
+		{
+			desc: "fare rules, invalid fair reference",
+			content: newZipBuilderWithFare().add(
+				"stops.txt",
+				"stop_id,zone_id",
+				"stop_id,zone_id",
+			).add(
+				"routes.txt",
+				"route_id,route_type",
+				"route_id,3",
+			).add(
+				"fare_rules.txt",
+				"fare_id,route_id,origin_id,destination_id,contains_id",
+				"fare_id_1,route_id,zone_id,zone_id,zone_id",
+			).build(),
+			expected: &Static{
+				Agencies: []Agency{defaultAgency},
+				Stops:    []Stop{defaultStopWithZone},
+				Routes:   []Route{defaultRoute},
+				Fares:    []Fare{defaultFare},
+				Warnings: []warnings.StaticWarning{
+					{
+						Kind: warnings.RowInvalidForeignKey{
+							Entity:          constants.FareRule,
+							ReferenceEntity: constants.Fare,
+							Column:          "fare_id",
+							Value:           "fare_id_1",
+						},
+						File:       constants.FareRulesFile,
+						RowNumber:  1,
+						RowContent: []string{"fare_id_1", "route_id", "zone_id", "zone_id", "zone_id"},
+						HeaderContent: []string{
+							"fare_id", "route_id", "origin_id", "destination_id", "contains_id",
+						},
+					},
+				},
+			},
+		},
+		{
+			desc: "fare rules, invalid route reference",
+			content: newZipBuilderWithFare().add(
+				"stops.txt",
+				"stop_id,zone_id",
+				"stop_id,zone_id",
+			).add(
+				"routes.txt",
+				"route_id,route_type",
+				"route_id,3",
+			).add(
+				"fare_rules.txt",
+				"fare_id,route_id,origin_id,destination_id,contains_id",
+				"fare_id,route_id_1,zone_id,zone_id,zone_id",
+			).build(),
+			expected: &Static{
+				Agencies: []Agency{defaultAgency},
+				Stops:    []Stop{defaultStopWithZone},
+				Routes:   []Route{defaultRoute},
+				Fares:    []Fare{defaultFare},
+				Warnings: []warnings.StaticWarning{
+					{
+						Kind: warnings.RowInvalidForeignKey{
+							Entity:          constants.FareRule,
+							ReferenceEntity: constants.Route,
+							Column:          "route_id",
+							Value:           "route_id_1",
+						},
+						File:       constants.FareRulesFile,
+						RowNumber:  1,
+						RowContent: []string{"fare_id", "route_id_1", "zone_id", "zone_id", "zone_id"},
+						HeaderContent: []string{
+							"fare_id", "route_id", "origin_id", "destination_id", "contains_id",
+						},
+					},
+				},
+			},
+		},
+		{
+			desc: "fare rules, invalid stop zone",
+			content: newZipBuilderWithFare().add(
+				"stops.txt",
+				"stop_id,zone_id",
+				"stop_id,zone_id",
+			).add(
+				"routes.txt",
+				"route_id,route_type",
+				"route_id,3",
+			).add(
+				"fare_rules.txt",
+				"fare_id,route_id,origin_id,destination_id,contains_id",
+				"fare_id,route_id,zone_id,zone_id_1,zone_id",
+			).build(),
+			expected: &Static{
+				Agencies: []Agency{defaultAgency},
+				Stops:    []Stop{defaultStopWithZone},
+				Routes:   []Route{defaultRoute},
+				Fares:    []Fare{defaultFare},
+				Warnings: []warnings.StaticWarning{
+					{
+						Kind: warnings.RowInvalidForeignId{
+							Entity:          constants.FareRule,
+							ReferenceEntity: constants.Stop,
+							ReferenceId:     constants.StopZoneId,
+							Column:          "destination_id",
+							Value:           "zone_id_1",
+						},
+						File:       constants.FareRulesFile,
+						RowNumber:  1,
+						RowContent: []string{"fare_id", "route_id", "zone_id", "zone_id_1", "zone_id"},
+						HeaderContent: []string{
+							"fare_id", "route_id", "origin_id", "destination_id", "contains_id",
+						},
+					},
+				},
+			},
+		},
 	} {
 		t.Run(tc.desc, func(t *testing.T) {
 			actual, err := ParseStatic(tc.content, tc.opts)
@@ -1221,6 +1640,29 @@ func newZipBuilderWithDefaults() *zipBuilder {
 	).add(
 		"trips.txt",
 		"route_id,service_id,trip_id\nroute_id,service_id,trip_id")
+}
+
+func newZipBuilderWithAgency() *zipBuilder {
+	return newZipBuilder().add(
+		"agency.txt",
+		"agency_id,agency_name,agency_url,agency_timezone\na,b,c,d",
+	)
+}
+
+func newZipBuilderWithMultipleAgencies() *zipBuilder {
+	return newZipBuilder().add(
+		"agency.txt",
+		"agency_id,agency_name,agency_url,agency_timezone",
+		"a,b,c,d",
+		"e,f,g,h",
+	)
+}
+
+func newZipBuilderWithFare() *zipBuilder {
+	return newZipBuilderWithAgency().add(
+		"fare_attributes.txt",
+		"fare_id,price,currency_type,payment_method,transfers,agency_id\nfare_id,2.90,USD,1,,a",
+	)
 }
 
 func (z *zipBuilder) add(fileName string, fileContent ...string) *zipBuilder {
