@@ -73,7 +73,7 @@ Below is a list of the GTFS schedule files and whether they are currently suppor
 | [location_groups.txt](https://gtfs.org/documentation/schedule/reference/#location_groupstxt)           | ❌        | Conditionally Forbidden |                                                             |
 | [shapes.txt](https://gtfs.org/documentation/schedule/reference/#shapestxt)                             | ✅        | Optional                |                                                             |
 | [frequencies.txt](https://gtfs.org/documentation/schedule/reference/#frequenciestxt)                   | ✅        | Optional                |                                                             |
-| [transfers.txt](https://gtfs.org/documentation/schedule/reference/#transferstxt)                       | ✅        | Optional                |                                                             |
+| [transfers.txt](https://gtfs.org/documentation/schedule/reference/#transferstxt)                       | 🟨        | Optional                | Partially implemented                                       |
 | [pathways.txt](https://gtfs.org/documentation/schedule/reference/#pathwaystxt)                         | ❌        | Optional                |                                                             |
 | [levels.txt](https://gtfs.org/documentation/schedule/reference/#levelstxt)                             | ❌        | Conditionally Required  |                                                             |
 | [location_group_stops.txt](https://gtfs.org/documentation/schedule/reference/#location_group_stopstxt) | ❌        | Optional                |                                                             |
