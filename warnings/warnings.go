@@ -53,6 +53,76 @@ func (w MissingColumns) Error() string {
 	return fmt.Sprintf("csv file is missing columns %s", w.Columns)
 }
 
+type MissingConditionallyRequiredColumn struct {
+	Column    string
+	Condition string
+}
+
+func (w MissingConditionallyRequiredColumn) Error() string {
+	return fmt.Sprintf("column %q is required when %s", w.Column, w.Condition)
+}
+
+type RowMissingRequiredValue struct {
+	Entity constants.ScheduleEnity
+	Id     string
+	Column string
+}
+
+func (w RowMissingRequiredValue) Error() string {
+	return fmt.Sprintf("%s %q is missing required value for column %q", w.Entity, w.Id, w.Column)
+}
+
+type RowMissingConditionallyRequiredValue struct {
+	Entity    constants.ScheduleEnity
+	Id        string
+	Column    string
+	Condition string
+}
+
+func (w RowMissingConditionallyRequiredValue) Error() string {
+	return fmt.Sprintf("%s %q is missing required value for column %q when %s", w.Entity, w.Id, w.Column, w.Condition)
+}
+
+type RowInvalidValue struct {
+	Entity constants.ScheduleEnity
+	Id     string
+	Column string
+	Value  string
+	Reason string
+}
+
+func (w RowInvalidValue) Error() string {
+	if w.Reason == "" {
+		return fmt.Sprintf("%s %q has invalid value %s for column %q", w.Entity, w.Id, w.Value, w.Column)
+	}
+	return fmt.Sprintf("%s %q has invalid value %s for column %q: %s", w.Entity, w.Id, w.Value, w.Column, w.Reason)
+}
+
+type RowInvalidForeignKey struct {
+	Entity          constants.ScheduleEnity
+	ReferenceEntity constants.ScheduleEnity
+	Id              string
+	Column          string
+	Value           string
+}
+
+func (w RowInvalidForeignKey) Error() string {
+	return fmt.Sprintf("%s %q has invalid foreign key %s reference to %s for column %q", w.Entity, w.Id, w.Value, w.ReferenceEntity, w.Column)
+}
+
+type RowInvalidForeignId struct {
+	Entity          constants.ScheduleEnity
+	ReferenceEntity constants.ScheduleEnity
+	ReferenceId     constants.ForeignId
+	Id              string
+	Column          string
+	Value           string
+}
+
+func (w RowInvalidForeignId) Error() string {
+	return fmt.Sprintf("%s %q has invalid foreign key %s reference to %s %q for column %q", w.Entity, w.Id, w.Value, w.ReferenceEntity, w.ReferenceId, w.Column)
+}
+
 type AgencyMissingValues struct {
 	AgencyID string
 	Columns  []string

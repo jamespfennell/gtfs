@@ -14,21 +14,33 @@ import (
 	"golang.org/x/text/transform"
 )
 
+type MissingConditionallyRequiredColumn struct {
+	Column    string
+	Condition string
+}
+
 type File struct {
-	name                   constants.StaticFile
-	csvReader              *csv.Reader
-	headerMap              map[string]int
-	headerContent          []string
-	rowNumber              int
-	missingRequiredColumns []string
-	currentRow             *row
-	ioErr                  error
-	closer                 func() error
+	name                                constants.StaticFile
+	csvReader                           *csv.Reader
+	headerMap                           map[string]int
+	headerContent                       []string
+	rowNumber                           int
+	missingRequiredColumns              []string
+	missingConditionallyRequiredColumns []MissingConditionallyRequiredColumn
+	currentRow                          *row
+	ioErr                               error
+	closer                              func() error
+}
+
+type MissingKeyWithCondition struct {
+	key       string
+	condition string
 }
 
 type row struct {
-	cells       []string
-	missingKeys []string
+	cells                    []string
+	missingKeys              []string
+	missingKeysWithCondition []MissingKeyWithCondition
 }
 
 func New(name constants.StaticFile, reader io.ReadCloser) (*File, error) {
@@ -66,18 +78,27 @@ func (f *File) HeaderContent() []string {
 }
 
 type RequiredColumn struct {
-	i int
-	s string
-	f *File
+	i          int
+	s          string
+	f          *File
+	allowEmpty bool
 }
 
-func (f *File) RequiredColumn(s string) RequiredColumn {
+func (f *File) requiredColumn(s string, allowEmpty bool) RequiredColumn {
 	i, b := f.headerMap[s]
 	if !b {
 		f.missingRequiredColumns = append(f.missingRequiredColumns, s)
 		i = -1
 	}
-	return RequiredColumn{i, s, f}
+	return RequiredColumn{i, s, f, allowEmpty}
+}
+
+func (f *File) RequiredColumn(s string) RequiredColumn {
+	return f.requiredColumn(s, false)
+}
+
+func (f *File) RequiredColumnAllowEmpty(s string) RequiredColumn {
+	return f.requiredColumn(s, true)
 }
 
 func (p *File) MissingRequiredColumns() []string {
@@ -87,10 +108,66 @@ func (p *File) MissingRequiredColumns() []string {
 	return p.missingRequiredColumns
 }
 
+func (c RequiredColumn) Name() string {
+	return c.s
+}
+
 func (c RequiredColumn) Read() string {
 	r := c.f.currentRow
-	if c.i >= len(r.cells) || r.cells[c.i] == "" {
+	if c.i >= len(r.cells) || (!c.allowEmpty && r.cells[c.i] == "") {
 		r.missingKeys = append(r.missingKeys, c.s)
+		return ""
+	}
+	return c.f.currentRow.cells[c.i]
+}
+
+type ConditionallyRequiredColumn struct {
+	i           int
+	s           string
+	f           *File
+	condition   string
+	isRequired  bool
+	allowsEmpty bool
+}
+
+func (f *File) conditionallyRequiredColumn(s string, condition string, isRequired bool, allowEmpty bool) ConditionallyRequiredColumn {
+	i, b := f.headerMap[s]
+	if !b {
+		i = -1
+		if isRequired {
+			f.missingConditionallyRequiredColumns = append(f.missingConditionallyRequiredColumns,
+				MissingConditionallyRequiredColumn{Column: s, Condition: condition})
+		}
+	}
+	return ConditionallyRequiredColumn{i, s, f, condition, isRequired, allowEmpty}
+}
+
+func (f *File) ConditionallyRequiredColumn(s string, condition string, isRequred bool) ConditionallyRequiredColumn {
+	return f.conditionallyRequiredColumn(s, condition, isRequred, false)
+}
+
+func (f *File) ConditionallyRequiredColumnAllowEmpty(s string, condition string, isRequred bool) ConditionallyRequiredColumn {
+	return f.conditionallyRequiredColumn(s, condition, isRequred, true)
+}
+
+func (p *File) MissingConditionallyRequiredColumns() []MissingConditionallyRequiredColumn {
+	if len(p.missingConditionallyRequiredColumns) == 0 {
+		return nil
+	}
+	return p.missingConditionallyRequiredColumns
+}
+
+func (c ConditionallyRequiredColumn) Name() string {
+	return c.s
+}
+
+func (c ConditionallyRequiredColumn) Read() string {
+	r := c.f.currentRow
+	if c.i < 0 || c.i >= len(r.cells) || (!c.allowsEmpty && r.cells[c.i] == "") {
+		if c.isRequired {
+			r.missingKeysWithCondition = append(r.missingKeysWithCondition,
+				MissingKeyWithCondition{key: c.s, condition: c.condition})
+		}
 		return ""
 	}
 	return c.f.currentRow.cells[c.i]
@@ -98,6 +175,7 @@ func (c RequiredColumn) Read() string {
 
 type OptionalColumn struct {
 	i int
+	s string
 	f *File
 }
 
@@ -106,7 +184,11 @@ func (f *File) OptionalColumn(s string) OptionalColumn {
 	if !b {
 		i = -1
 	}
-	return OptionalColumn{i: i, f: f}
+	return OptionalColumn{i: i, s: s, f: f}
+}
+
+func (c OptionalColumn) Name() string {
+	return c.s
 }
 
 func (c OptionalColumn) Read() string {
@@ -161,6 +243,10 @@ func (f *File) RowNumber() int {
 
 func (f *File) MissingRowKeys() []string {
 	return f.currentRow.missingKeys
+}
+
+func (f *File) MissingRowKeysWithCondition() []MissingKeyWithCondition {
+	return f.currentRow.missingKeysWithCondition
 }
 
 func (f *File) Close() error {
