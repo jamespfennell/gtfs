@@ -40,6 +40,15 @@ func TestParse(t *testing.T) {
 		ContinuousPickup:  PickupDropOffPolicy_No,
 		ContinuousDropOff: PickupDropOffPolicy_No,
 	}
+	otherRoute := Route{
+		Id:                "other_route_id",
+		Agency:            &defaultAgency,
+		Color:             "FFFFFF",
+		TextColor:         "000000",
+		Type:              RouteType_Bus,
+		ContinuousPickup:  PickupDropOffPolicy_No,
+		ContinuousDropOff: PickupDropOffPolicy_No,
+	}
 	defaultStop := Stop{
 		Id: "stop_id",
 	}
@@ -51,6 +60,11 @@ func TestParse(t *testing.T) {
 	defaultTrip := ScheduledTrip{
 		ID:      "trip_id",
 		Route:   &defaultRoute,
+		Service: &defaultService,
+	}
+	otherTrip := ScheduledTrip{
+		ID:      "other_trip_id",
+		Route:   &otherRoute,
 		Service: &defaultService,
 	}
 	for _, tc := range []struct {
@@ -347,6 +361,98 @@ func TestParse(t *testing.T) {
 			).build(),
 			expected: &Static{
 				Stops: []Stop{{Id: "b"}},
+			},
+		},
+		{
+			desc: "transfer with route",
+			content: newZipBuilder().add(
+				"agency.txt",
+				"agency_id,agency_name,agency_url,agency_timezone\na,b,c,d",
+			).add(
+				"routes.txt",
+				"route_id,route_type\nroute_id,3\nother_route_id,3",
+			).add(
+				"stops.txt",
+				"stop_id\na\nb",
+			).add(
+				"transfers.txt",
+				"from_stop_id,to_stop_id,from_route_id,to_route_id,transfer_type,min_transfer_time\na,b,route_id,other_route_id,2,300",
+			).build(),
+			expected: &Static{
+				Agencies: []Agency{defaultAgency},
+				Routes: []Route{
+					defaultRoute,
+					otherRoute,
+				},
+				Stops: []Stop{
+					{Id: "a"},
+					{Id: "b"},
+				},
+				Transfers: []Transfer{
+					{
+						From:            &Stop{Id: "a"},
+						To:              &Stop{Id: "b"},
+						Type:            TransferType_RequiresTime,
+						MinTransferTime: ptr(int32(300)),
+						FromRoute:       &defaultRoute,
+						ToRoute:         &otherRoute,
+					},
+				},
+			},
+		},
+		{
+			desc: "transfer with trip",
+			content: newZipBuilder().add(
+				"agency.txt",
+				"agency_id,agency_name,agency_url,agency_timezone\na,b,c,d",
+			).add(
+				"routes.txt",
+				"route_id,route_type\nroute_id,3\nother_route_id,3",
+			).add(
+				"stops.txt",
+				"stop_id\na\nb",
+			).add(
+				"trips.txt",
+				"route_id,service_id,trip_id,shape_id",
+				"route_id,service_id,trip_id,shape_id",
+				"other_route_id,service_id,other_trip_id,other_shape_id",
+			).add(
+				"calendar.txt",
+				"service_id,monday,tuesday,wednesday,thursday,friday,saturday,sunday,start_date,end_date\n"+
+					"service_id,0,0,0,0,0,0,0,20220504,20220507",
+			).add(
+				"transfers.txt",
+				"from_stop_id,to_stop_id,from_route_id,to_route_id,from_trip_id,to_trip_id,transfer_type,min_transfer_time\na,b,route_id,other_route_id,trip_id,other_trip_id,2,300",
+			).build(),
+			expected: &Static{
+				Agencies: []Agency{defaultAgency},
+				Routes: []Route{
+					defaultRoute,
+					otherRoute,
+				},
+				Trips: []ScheduledTrip{
+					defaultTrip,
+					otherTrip,
+				},
+				Services: []Service{
+					defaultService,
+				},
+				Stops: []Stop{
+					{Id: "a"},
+					{Id: "b"},
+				},
+				Transfers: []Transfer{
+					{
+						From:            &Stop{Id: "a"},
+						To:              &Stop{Id: "b"},
+						Type:            TransferType_RequiresTime,
+						MinTransferTime: ptr(int32(300)),
+						FromRoute:       &defaultRoute,
+						ToRoute:         &otherRoute,
+						FromTrip:        &defaultTrip,
+						ToTrip:          &otherTrip,
+					},
+				},
 			},
 		},
 		{

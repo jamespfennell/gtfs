@@ -90,6 +90,12 @@ type Transfer struct {
 	To              *Stop
 	Type            TransferType
 	MinTransferTime *int32
+
+	FromRoute *Route
+	ToRoute   *Route
+
+	FromTrip *ScheduledTrip
+	ToTrip   *ScheduledTrip
 }
 
 type Service struct {
@@ -211,14 +217,6 @@ func ParseStatic(content []byte, opts ParseStaticOptions) (*Static, error) {
 			},
 		},
 		{
-			File: "transfers.txt",
-			Action: func(file *csv.File) (w []warnings.StaticWarning) {
-				result.Transfers = parseTransfers(file, result.Stops)
-				return
-			},
-			Optional: true,
-		},
-		{
 			File: "calendar.txt",
 			Action: func(file *csv.File) (w []warnings.StaticWarning) {
 				parseCalendar(file, serviceIdToService, timezone)
@@ -259,6 +257,14 @@ func ParseStatic(content []byte, opts ParseStaticOptions) (*Static, error) {
 				}
 				return
 			},
+		},
+		{
+			File: "transfers.txt",
+			Action: func(file *csv.File) (w []warnings.StaticWarning) {
+				result.Transfers = parseTransfers(file, result.Stops, result.Routes, result.Trips)
+				return
+			},
+			Optional: true,
 		},
 		{
 			File: "frequencies.txt",
@@ -515,9 +521,13 @@ func parseFloat64(s string) *float64 {
 	return &f
 }
 
-func parseTransfers(csv *csv.File, stops []Stop) []Transfer {
+func parseTransfers(csv *csv.File, stops []Stop, routes []Route, trips []ScheduledTrip) []Transfer {
 	fromStopIDColumn := csv.RequiredColumn("from_stop_id")
 	toStopIDColumn := csv.RequiredColumn("to_stop_id")
+	fromRouteIDColumn := csv.OptionalColumn("from_route_id")
+	toRouteIDColumn := csv.OptionalColumn("to_route_id")
+	fromTripIDColumn := csv.OptionalColumn("from_trip_id")
+	toTripIDColumn := csv.OptionalColumn("to_trip_id")
 	typeColumn := csv.OptionalColumn("transfer_type")
 	transferTimeColumn := csv.OptionalColumn("min_transfer_time")
 
@@ -530,6 +540,15 @@ func parseTransfers(csv *csv.File, stops []Stop) []Transfer {
 	for i := range stops {
 		stopIdToStop[stops[i].Id] = &stops[i]
 	}
+	routeIdToRoute := map[string]*Route{}
+	for i := range routes {
+		routeIdToRoute[routes[i].Id] = &routes[i]
+	}
+	tripIdToTrip := map[string]*ScheduledTrip{}
+	for i := range trips {
+		tripIdToTrip[trips[i].ID] = &trips[i]
+	}
+
 	var transfers []Transfer
 	for csv.NextRow() {
 		fromStopID := fromStopIDColumn.Read()
@@ -557,6 +576,10 @@ func parseTransfers(csv *csv.File, stops []Stop) []Transfer {
 			To:              toStop,
 			Type:            parseTransferType(typeColumn.Read()),
 			MinTransferTime: parseInt32(transferTimeColumn.Read()),
+			FromRoute:       routeIdToRoute[fromRouteIDColumn.Read()],
+			ToRoute:         routeIdToRoute[toRouteIDColumn.Read()],
+			FromTrip:        tripIdToTrip[fromTripIDColumn.Read()],
+			ToTrip:          tripIdToTrip[toTripIDColumn.Read()],
 		})
 	}
 	return transfers
