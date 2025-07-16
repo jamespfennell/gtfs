@@ -794,17 +794,19 @@ func parseScheduledStopTimes(csv *csv.File, stops []Stop, trips []ScheduledTrip)
 	}
 	var currentTrip *ScheduledTrip
 	var currentTripID string
+	var hasNonEmptyShapeDistRow = false
 	for csv.NextRow() {
 		arrival, arrivalOk := parseGtfsTimeToDuration(arrivalTimeColumn.Read())
 		departure, departureOk := parseGtfsTimeToDuration(departureTimeColumn.Read())
-		if !arrivalOk && !departureOk {
-			continue
-		}
+
 		if !departureOk {
 			arrival = departure
 		}
 		if !arrivalOk {
 			departure = arrival
+		}
+		if len(shapeDistanceTraveledColumn.Read()) > 0 {
+			hasNonEmptyShapeDistRow = true
 		}
 		stopSequence, err := strconv.Atoi(stopSequenceKey.Read())
 		if err != nil {
@@ -849,6 +851,11 @@ func parseScheduledStopTimes(csv *csv.File, stops []Stop, trips []ScheduledTrip)
 		sort.Slice(trip.StopTimes, func(i, j int) bool {
 			return trip.StopTimes[i].StopSequence < trip.StopTimes[j].StopSequence
 		})
+		if hasNonEmptyShapeDistRow {
+			trip.StopTimes = interpolateStopTimesByShapeDist(trip.StopTimes)
+		} else {
+			trip.StopTimes = interpolateStopTimes(trip.StopTimes)
+		}
 	}
 }
 
